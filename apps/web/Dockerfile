@@ -8,6 +8,8 @@ COPY apps/web/package.json ./apps/web/
 RUN bun install --frozen-lockfile
 
 COPY . .
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 RUN cd apps/web && bun run build
 
 FROM caddy:2-alpine

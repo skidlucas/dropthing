@@ -3,7 +3,12 @@ import { cors } from "hono/cors";
 
 const app = new Hono();
 
-app.use("*", cors());
+app.use(
+  "*",
+  cors({
+    origin: process.env.CORS_ORIGIN || "*",
+  }),
+);
 
 app.get("/health", (c) => {
   return c.json({ status: "ok", service: "dropthing-api" });

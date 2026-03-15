@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { Effect } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
+const API_URL = import.meta.env.VITE_API_URL || "/api";
+
 const healthCheck = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;
-  const response = yield* client.get("/api/health");
+  const response = yield* client.get(`${API_URL}/health`);
   return yield* response.json;
 }).pipe(Effect.provide(FetchHttpClient.layer));
 

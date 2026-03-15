@@ -9,7 +9,7 @@ COPY apps/web/package.json ./apps/web/
 RUN bun install --frozen-lockfile
 
 FROM base AS runtime
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app .
 COPY . .
 EXPOSE 3000
 CMD ["bun", "run", "apps/api/src/index.ts"]

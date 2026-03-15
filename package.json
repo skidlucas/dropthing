@@ -12,7 +12,9 @@
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt --write .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "compose": "docker compose up -d",
+    "compose:down": "docker compose down"
   },
   "devDependencies": {
     "oxfmt": "^0.40.0",

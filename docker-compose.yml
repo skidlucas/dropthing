@@ -7,9 +7,9 @@ services:
       POSTGRES_PASSWORD: dropthing
       POSTGRES_DB: dropthing
     ports:
-      - "5432:5432"
+      - "6543:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/18/data
 
 volumes:
   pgdata:

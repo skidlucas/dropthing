@@ -12,7 +12,4 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DB_URL,
   },
-  migrations: {
-    schema: 'public',
-  },
 });

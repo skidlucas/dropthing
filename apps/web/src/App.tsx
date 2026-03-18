@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
-import { Effect } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { useEffect, useState } from 'react';
+import { Effect } from 'effect';
+import { FetchHttpClient, HttpClient } from '@effect/platform';
 
-const API_URL = import.meta.env.VITE_API_URL || "/api";
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const healthCheck = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;
@@ -15,8 +15,8 @@ export function App() {
 
   useEffect(() => {
     Effect.runPromise(healthCheck)
-      .then((data: any) => setStatus(data.status))
-      .catch(() => setStatus("error"));
+      .then((data) => setStatus((data as { status: string }).status))
+      .catch(() => setStatus('error'));
   }, []);
 
   return (
@@ -25,10 +25,10 @@ export function App() {
         <h1 className="text-4xl font-bold tracking-tight">dropthing</h1>
         <p className="text-neutral-400">drop and share your files</p>
         <div className="text-sm text-neutral-500">
-          API:{" "}
+          API:{' '}
           {status === null ? (
             <span className="text-neutral-500">...</span>
-          ) : status === "ok" ? (
+          ) : status === 'ok' ? (
             <span className="text-green-500">connected</span>
           ) : (
             <span className="text-red-500">error</span>

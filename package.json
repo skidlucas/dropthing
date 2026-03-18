@@ -13,15 +13,25 @@
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
+    "type-check": "tsc --build --noEmit",
     "compose": "docker compose up -d",
-    "compose:down": "docker compose down"
+    "compose:down": "docker compose down",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@effect/language-service": "0.80.0",
     "api": "workspace:*",
     "dotenv": "17.3.1",
+    "husky": "9.1.7",
+    "lint-staged": "16.4.0",
     "oxfmt": "0.40.0",
     "oxlint": "1.55.0",
     "typescript": "5.9.3"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,yml,yaml}": [
+      "oxlint --fix",
+      "oxfmt --write"
+    ]
   }
 }

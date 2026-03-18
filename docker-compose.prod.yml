@@ -11,7 +11,7 @@ services:
       - R2_BUCKET=${R2_BUCKET}
       - CORS_ORIGIN=${CORS_ORIGIN}
     expose:
-      - "3000"
+      - '3000'
 
   web:
     build:
@@ -20,6 +20,6 @@ services:
       args:
         - VITE_API_URL=${VITE_API_URL}
     expose:
-      - "8080"
+      - '8080'
     depends_on:
       - api

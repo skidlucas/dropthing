@@ -29,74 +29,76 @@ Files have a configurable time-to-live (max 1 week) and are automatically delete
 
 ### Runtime & language
 
-| Tool | Version | Notes |
-|------|---------|-------|
-| **Bun** | 1.3.9+ | JavaScript runtime, package manager, native workspaces |
-| **TypeScript** | 5.x (Bun compat) | |
+| Tool           | Version | Notes                                                  |
+| -------------- | ------- | ------------------------------------------------------ |
+| **Bun**        | 1.3.9   | JavaScript runtime, package manager, native workspaces |
+| **TypeScript** | 5.9.3   |                                                        |
 
 ### Backend
 
-| Tool | Version | Role |
-|------|---------|------|
-| **Effect** | 4.0.0-beta.31 | Core business logic: typed errors, services, layers, schemas, scheduling |
-| **Hono** | 4.x | Web framework (ultralight, Bun first-class support, Web Standards) |
-| **Drizzle ORM** | 1.0.0-beta.9 | Type-safe query builder with Effect integration (`drizzle-orm/effect-postgres`) |
-| **@effect/sql-pg** | 4.0.0-beta.31 | Native Effect layer for PostgreSQL |
+| Tool               | Version       | Role                                                                            |
+| ------------------ | ------------- | ------------------------------------------------------------------------------- |
+| **Effect**         | 3.20.0        | Core business logic: typed errors, services, layers, schemas, scheduling        |
+| **Hono**           | 4.12.8        | Web framework (ultralight, Bun first-class support, Web Standards)              |
+| **Drizzle ORM**    | 1.0.0-beta.9  | Type-safe query builder with Effect integration (`drizzle-orm/effect-postgres`) |
+| **@effect/sql-pg** | 0.50.3        | Effect PgClient layer for PostgreSQL                                            |
 
 ### Database
 
-| Tool | Role |
-|------|------|
+| Tool              | Role                                                          |
+| ----------------- | ------------------------------------------------------------- |
 | **PostgreSQL 18** | Metadata storage (ID, expiration, MIME type, size, file path) |
-
-> In Effect v4, `@effect/sql-pg` is part of the unified package system and shares the same version number as the `effect` package.
 
 ### File storage
 
-| Tool | Role |
-|------|------|
+| Tool              | Role                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------- |
 | **Cloudflare R2** | S3-compatible object storage, **no egress fees** (ideal for file sharing), 10 GB free |
 
 Storage is abstracted behind a `StorageService` (Effect Layer) — can be swapped to S3, MinIO, or local filesystem without touching business logic.
 
 ### Frontend
 
-| Tool | Version | Role |
-|------|---------|------|
-| **React** | 19.x | UI (familiarity choice — the goal is to learn Effect, not a new frontend framework) |
-| **Vite** | 6.x | Build tool |
-| **shadcn/ui** | latest | Accessible, customizable UI components |
-| **Tailwind CSS** | 4.x | Utility-first styling |
-| **Effect** | 4.0.0-beta.31 | HttpClient for API calls (no TanStack Query — Effect handles the HTTP layer) |
+| Tool             | Version | Role                                                                                |
+| ---------------- | ------- | ----------------------------------------------------------------------------------- |
+| **React**        | 19.x    | UI (familiarity choice — the goal is to learn Effect, not a new frontend framework) |
+| **Vite**         | 6.x     | Build tool                                                                          |
+| **shadcn/ui**    | latest  | Accessible, customizable UI components                                              |
+| **Tailwind CSS** | 4.x     | Utility-first styling                                                               |
+| **Effect**       | 3.20.0  | HttpClient for API calls (no TanStack Query — Effect handles the HTTP layer)        |
 
 ### Linting & formatting
 
-| Tool | Role |
-|------|------|
-| **oxlint** | Linter |
-| **oxfmt** | Formatter |
+| Tool             | Version | Role                                |
+| ---------------- | ------- | ----------------------------------- |
+| **oxlint**       | 1.55.0  | Linter                              |
+| **oxfmt**        | 0.40.0  | Formatter                           |
+| **husky**        | 9.1.7   | Git hooks                           |
+| **lint-staged**  | 16.4.0  | Run lint/format on staged files     |
+
+Pre-commit hook runs `oxlint --fix` + `oxfmt --write` on staged files via lint-staged.
 
 ### Monorepo
 
-| Tool | Role |
-|------|------|
+| Tool               | Role                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------ |
 | **Bun workspaces** | Monorepo management (simple `workspaces` field in root `package.json`, zero extra tooling) |
 
 > Turborepo considered overkill for a solo project with 2-3 packages.
 
 ### Deployment
 
-| Tool | Role |
-|------|------|
-| **Docker** | One Dockerfile per app (multi-stage build with `oven/bun` image). API uses `oven/bun:1-slim` for runtime. |
-| **Caddy** | Serves the frontend static build + reverse proxies `/api` to the API service (in the web Dockerfile) |
-| **Coolify** | Self-hosted deployment platform, deploys via a single `docker-compose.prod.yml` |
+| Tool        | Role                                                                                                      |
+| ----------- | --------------------------------------------------------------------------------------------------------- |
+| **Docker**  | One Dockerfile per app (multi-stage build with `oven/bun` image). API uses `oven/bun:1-slim` for runtime. |
+| **Caddy**   | Serves the frontend static build (in the web Dockerfile)                                                  |
+| **Coolify** | Self-hosted deployment platform, deploys via a single `docker-compose.prod.yml`                           |
 
-Architecture: `Traefik (Coolify) → web (Caddy :8080) → static files + /api/* → api:3000`
+Two separate domains:
+- `dropthing.lukapps.fr` (web, Caddy static files on :8080)
+- `api.dropthing.lukapps.fr` (API on :3000)
 
-Two domains: `dropthing.lukapps.fr` (web) and `api.dropthing.lukapps.fr` (API).
-
-PostgreSQL is managed as a separate service by Coolify.
+Traefik (managed by Coolify) routes traffic to each service. PostgreSQL is managed as a separate service by Coolify.
 
 ---
 
@@ -105,63 +107,103 @@ PostgreSQL is managed as a separate service by Coolify.
 ```
 dropthing/
 ├── package.json                # workspaces: ["packages/*", "apps/*"]
-├── docker-compose.yml          # Local dev: PostgreSQL 18
+├── tsconfig.json               # Base config + project references
+├── .oxlintrc.json              # Shared oxlint config
+├── .husky/pre-commit           # lint-staged hook
+├── docker-compose.yml          # Local dev: PostgreSQL 18 on port 6543
 ├── docker-compose.prod.yml     # Production: api + web (portable, no Coolify dependency)
-├── .env                        # Environment variables (DB_URL, R2_*, CORS_ORIGIN, VITE_API_URL)
+├── .env                        # Root env for docker-compose.prod.yml (DB_URL, R2_*, CORS_ORIGIN, VITE_API_URL)
 ├── apps/
 │   ├── api/                    # Hono + Effect — backend API
+│   │   ├── .env                # Local dev env (DB_URL)
 │   │   ├── Dockerfile          # Multi-stage: oven/bun:1 (deps) → oven/bun:1-slim (runtime)
+│   │   ├── tsconfig.json       # Extends root, composite: true
 │   │   └── src/
-│   │       ├── index.ts        # Hono app entrypoint
-│   │       └── services/       # Effect service stubs
-│   │           ├── storage.ts
-│   │           ├── metadata.ts
-│   │           ├── cleanup.ts
-│   │           └── upload.ts
+│   │       ├── index.ts        # Hono app entrypoint, centralized layer composition
+│   │       ├── helpers.ts      # Shared route helpers (withBasicErrorHandling)
+│   │       ├── db/
+│   │       │   └── schema.ts   # Drizzle table definitions (dropsTable)
+│   │       ├── routes/
+│   │       │   ├── health.ts   # GET /health
+│   │       │   └── drop.ts     # GET /drops/:id (+ future POST, GET file)
+│   │       └── services/
+│   │           ├── db.ts       # DrizzleService, PgClientLive, DrizzleLive
+│   │           └── drop.ts     # DropService, DropServiceLive
 │   └── web/                    # React + Vite + shadcn — frontend
 │       ├── Dockerfile          # Multi-stage: oven/bun:1 (build) → caddy:2-alpine (serve)
 │       ├── Caddyfile           # Static file server
+│       ├── tsconfig.json       # Extends root, composite: true, jsx: react-jsx
 │       └── src/
 ├── packages/
-│   └── shared/                 # Effect schemas, types, constants
-│                               # Imported as @dropthing/shared
+│   └── shared/                 # Effect schemas, types, errors
+│       ├── tsconfig.json       # Extends root, composite: true
+│       └── src/
+│           ├── index.ts        # Re-exports schemas + errors
+│           ├── schemas.ts      # Drop schema (Effect Schema)
+│           └── errors.ts       # InvalidInputError (Data.TaggedError)
 ```
 
 ---
 
 ## Effect services (backend)
 
-### StorageService
+### DropService
+
+- `save(drop)` — insert drop metadata into PG
+- `get(id)` — retrieve a drop by ID, decoded via `Schema.decodeUnknown(Drop)`
+- `listExpired()` — list all expired drops, decoded via `Schema.decodeUnknown(Schema.Array(Drop))`
+- `delete(id)` — delete a drop from PG
+- Uses `DrizzleService` as a dependency (injected via Layer)
+
+### StorageService (planned)
+
 - `save(file, key)` — upload to R2
 - `get(key)` — stream from R2
 - `delete(key)` — delete from R2
 - Abstracted behind a Layer, R2 today, swappable
 
-### MetadataService
-- PostgreSQL CRUD: register a share, retrieve info, list active shares
-- Uses `@effect/sql-pg` + Drizzle ORM to stay within the Effect ecosystem
+### CleanupService (planned)
 
-### CleanupService
 - Purges expired files (R2 file + PG metadata)
 - Runs periodically via Effect `Schedule`
 
-### UploadService
+### UploadService (planned)
+
 - Orchestrates the full flow: validation → storage → metadata → return share link
 - Composes the other services
 
 ---
 
-## Typed error modeling
+## Error handling
+
+### Tagged errors (shared)
 
 ```typescript
-// Expected business errors (Effect Error channel)
+// In @dropthing/shared/errors.ts
+class InvalidInputError extends Data.TaggedError("InvalidInputError")<{
+  message: string;
+}>
+```
+
+### Route error handling
+
+Routes use `withBasicErrorHandling` helper that pipes errors through:
+1. `catchTag("InvalidInputError")` → 400
+2. `catchTag("ParseError")` → 500
+3. `catchAll` → 500
+
+Input validation (e.g., UUID format) uses `Schema.decodeUnknown` + `Effect.mapError` to transform `ParseError` into `InvalidInputError`.
+
+### Planned business errors
+
+```typescript
 type AppError =
-  | FileTooLarge         // file > 300 MB
-  | UnsupportedMimeType  // disallowed MIME type (if restricted)
-  | ShareNotFound        // invalid or non-existent link
-  | ShareExpired         // file has expired
+  | FileTooLarge        // file > 300 MB
+  | UnsupportedMimeType // disallowed MIME type
+  | DropNotFound        // invalid or non-existent link
+  | DropExpired         // file has expired
   | StorageQuotaExceeded // R2 quota exceeded
-  | InvalidTTL           // TTL out of bounds
+  | InvalidTTL;         // TTL out of bounds
 ```
 
 ---
@@ -169,19 +211,22 @@ type AppError =
 ## Main flows
 
 ### Upload
+
 1. Validate parameters with `Schema` (size, type, TTL)
 2. Stream file upload to R2 via `StorageService`
-3. Save metadata in PG via `MetadataService`
+3. Save metadata in PG via `DropService`
 4. Return unique download link
 
 ### Download
-1. Look up metadata via `MetadataService`
-2. Check expiration → `ShareExpired` if past due
+
+1. Look up metadata via `DropService`
+2. Check expiration → `DropExpired` if past due
 3. Stream file from R2 via `StorageService`
 
 ### Cleanup
+
 1. Periodic job (`Schedule.spaced` or `Schedule.cron`)
-2. List expired shares in PG
+2. List expired drops in PG via `DropService.listExpired()`
 3. Delete files from R2
 4. Delete metadata from PG
 
@@ -189,12 +234,13 @@ type AppError =
 
 ## Learning goals
 
-This project is a hands-on exercise for learning **Effect (v4 beta)**. Key concepts to practice:
+This project is a hands-on exercise for learning **Effect (v3 stable)**. Key concepts to practice:
 
 - **Effect & pipe**: basic functional composition
-- **Schema**: typed input validation (upload params, TTL, etc.)
-- **Typed errors**: explicit error modeling in the Error channel
-- **Service & Layer**: dependency injection (StorageService, MetadataService, etc.)
+- **Schema**: typed input validation + runtime decoding (`Schema.decodeUnknown`)
+- **Typed errors**: explicit error modeling with `Data.TaggedError`, `catchTag`, `mapError`
+- **Service & Layer**: dependency injection (DrizzleService → DropService, centralized composition)
+- **ManagedRuntime**: shared runtime for Hono handlers, single DB connection pool
 - **Schedule**: periodic cleanup job
 - **Stream**: streaming upload/download of large files
 - **Effect.all**: concurrent operations (e.g. cleanup of multiple files)

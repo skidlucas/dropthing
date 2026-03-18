@@ -1,14 +1,12 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "7c5dfdb0-2861-40ab-9c11-6be1dc19e744",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "id": "2715e71c-5ef7-4771-a78e-6ad0e97b708b",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "isRlsEnabled": false,
-      "name": "shares",
+      "name": "drops",
       "entityType": "tables",
       "schema": "public"
     },
@@ -17,13 +15,13 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": null,
+      "default": "gen_random_uuid()",
       "generated": null,
       "identity": null,
       "name": "id",
       "entityType": "columns",
       "schema": "public",
-      "table": "shares"
+      "table": "drops"
     },
     {
       "type": "varchar",
@@ -36,7 +34,7 @@
       "name": "fileName",
       "entityType": "columns",
       "schema": "public",
-      "table": "shares"
+      "table": "drops"
     },
     {
       "type": "varchar",
@@ -49,7 +47,7 @@
       "name": "mimeType",
       "entityType": "columns",
       "schema": "public",
-      "table": "shares"
+      "table": "drops"
     },
     {
       "type": "integer",
@@ -62,7 +60,7 @@
       "name": "size",
       "entityType": "columns",
       "schema": "public",
-      "table": "shares"
+      "table": "drops"
     },
     {
       "type": "varchar",
@@ -75,7 +73,7 @@
       "name": "storageKey",
       "entityType": "columns",
       "schema": "public",
-      "table": "shares"
+      "table": "drops"
     },
     {
       "type": "timestamp",
@@ -88,20 +86,20 @@
       "name": "createdAt",
       "entityType": "columns",
       "schema": "public",
-      "table": "shares"
+      "table": "drops"
     },
     {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": null,
+      "default": "now() + interval '1 week'",
       "generated": null,
       "identity": null,
       "name": "expiresAt",
       "entityType": "columns",
       "schema": "public",
-      "table": "shares"
+      "table": "drops"
     },
     {
       "nameExplicit": true,
@@ -122,16 +120,14 @@
       "name": "expires_at_index",
       "entityType": "indexes",
       "schema": "public",
-      "table": "shares"
+      "table": "drops"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
-      "name": "shares_pkey",
+      "name": "drops_pkey",
       "schema": "public",
-      "table": "shares",
+      "table": "drops",
       "entityType": "pks"
     }
   ],

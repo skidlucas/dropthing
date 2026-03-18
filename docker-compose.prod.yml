@@ -12,6 +12,9 @@ services:
       - CORS_ORIGIN=${CORS_ORIGIN}
     expose:
       - '3001'
+    networks:
+      - coolify
+      - default
 
   web:
     build:
@@ -23,3 +26,10 @@ services:
       - '8080'
     depends_on:
       - api
+    networks:
+      - coolify
+      - default
+
+networks:
+  coolify:
+    external: true

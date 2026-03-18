@@ -12,4 +12,4 @@ WORKDIR /app
 COPY --from=deps /app .
 COPY . .
 EXPOSE 3001
-CMD ["bun", "run", "apps/api/src/index.ts"]
+CMD ["sh", "-c", "cd apps/api && bunx drizzle-kit migrate && cd ../.. && bun run apps/api/src/index.ts"]

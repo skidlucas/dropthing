@@ -11,5 +11,5 @@ FROM oven/bun:1-slim AS runtime
 WORKDIR /app
 COPY --from=deps /app .
 COPY . .
-EXPOSE 3000
+EXPOSE 3001
 CMD ["bun", "run", "apps/api/src/index.ts"]

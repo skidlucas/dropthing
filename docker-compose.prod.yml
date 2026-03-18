@@ -11,7 +11,7 @@ services:
       - R2_BUCKET=${R2_BUCKET}
       - CORS_ORIGIN=${CORS_ORIGIN}
     expose:
-      - '3000'
+      - '3001'
 
   web:
     build:

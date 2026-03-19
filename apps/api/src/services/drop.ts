@@ -1,51 +1,51 @@
-import { Context, Effect, Layer, Schema } from 'effect';
+import { Effect, Layer, Schema, ServiceMap } from 'effect';
 import { eq, lt } from 'drizzle-orm';
-import type { DrizzleQueryError } from 'drizzle-orm/errors';
 import { Drop } from '@dropthing/shared';
 import { dropsTable } from '../db/schema.js';
-import { DrizzleService } from './db.js';
-import { ParseError } from 'effect/ParseResult';
+import { DatabaseError, DrizzleService, query } from './db.js';
 
-const decodeDrop = Schema.decodeUnknown(Drop);
-const decodeDrops = Schema.decodeUnknown(Schema.Array(Drop));
+const decodeDrop = Schema.decodeUnknownEffect(Drop);
+const decodeDrops = Schema.decodeUnknownEffect(Schema.Array(Drop));
 
-export class DropService extends Context.Tag('DropService')<
-  DropService,
-  {
-    readonly save: (drop: Drop) => Effect.Effect<void, DrizzleQueryError>;
-    readonly get: (id: string) => Effect.Effect<Drop | null, ParseError | DrizzleQueryError>;
-    readonly listExpired: () => Effect.Effect<ReadonlyArray<Drop>, ParseError | DrizzleQueryError>;
-    readonly delete: (id: string) => Effect.Effect<void, DrizzleQueryError>;
-  }
->() {}
+type DropServiceShape = {
+  readonly save: (drop: Drop) => Effect.Effect<void, DatabaseError>;
+  readonly get: (id: string) => Effect.Effect<Drop | null, DatabaseError | Schema.SchemaError>;
+  readonly listExpired: () => Effect.Effect<
+    ReadonlyArray<Drop>,
+    DatabaseError | Schema.SchemaError
+  >;
+  readonly delete: (id: string) => Effect.Effect<void, DatabaseError>;
+};
 
-export const DropServiceLive = Layer.effect(
-  DropService,
-  Effect.gen(function* () {
-    const db = yield* DrizzleService;
+export class DropService extends ServiceMap.Service<DropService, DropServiceShape>()(
+  '@dropthing/DropService'
+) {
+  static readonly layer = Layer.effect(
+    DropService,
+    Effect.gen(function* () {
+      const db = yield* DrizzleService;
 
-    return {
-      // todo : à tester
-      save: (drop) => db.insert(dropsTable).values(drop),
+      const save = Effect.fn('DropService.save')(function* (drop: Drop) {
+        yield* query(db.insert(dropsTable).values(drop));
+      });
 
-      get: (id) =>
-        Effect.gen(function* () {
-          const rows = yield* db.select().from(dropsTable).where(eq(dropsTable.id, id));
-          return rows[0] ? yield* decodeDrop(rows[0]) : null;
-        }),
+      const get = Effect.fn('DropService.get')(function* (id: string) {
+        const rows = yield* query(db.select().from(dropsTable).where(eq(dropsTable.id, id)));
+        return rows[0] ? yield* decodeDrop(rows[0]) : null;
+      });
 
-      // todo : à tester
-      listExpired: () =>
-        Effect.gen(function* () {
-          const rows = yield* db
-            .select()
-            .from(dropsTable)
-            .where(lt(dropsTable.expiresAt, new Date()));
-          return yield* decodeDrops(rows);
-        }),
+      const listExpired = Effect.fn('DropService.listExpired')(function* () {
+        const rows = yield* query(
+          db.select().from(dropsTable).where(lt(dropsTable.expiresAt, new Date()))
+        );
+        return yield* decodeDrops(rows);
+      });
 
-      // todo : à tester
-      delete: (id) => db.delete(dropsTable).where(eq(dropsTable.id, id)),
-    };
-  })
-);
+      const del = Effect.fn('DropService.delete')(function* (id: string) {
+        yield* query(db.delete(dropsTable).where(eq(dropsTable.id, id)));
+      });
+
+      return { save, get, listExpired, delete: del };
+    })
+  );
+}

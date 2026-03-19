@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Effect } from 'effect';
-import { FetchHttpClient, HttpClient } from '@effect/platform';
+import { FetchHttpClient, HttpClient } from 'effect/unstable/http';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 

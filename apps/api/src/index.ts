@@ -1,14 +1,14 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Layer, ManagedRuntime } from 'effect';
-import { DropServiceLive } from './services/drop.js';
-import { DrizzleLive, PgClientLive } from './services/db.js';
+import { DropService } from './services/drop.js';
+import { DrizzleService } from './services/db.js';
 import health from './routes/health.js';
 import dropRoutes from './routes/drop.js';
 
 // Compose all layers at the entry point:
-// PgClientLive → DrizzleLive → DropServiceLive
-const AppLayer = DropServiceLive.pipe(Layer.provide(DrizzleLive), Layer.provide(PgClientLive));
+// DrizzleService.layer → DropService.layer
+const AppLayer = DropService.layer.pipe(Layer.provide(DrizzleService.layer));
 const runtime = ManagedRuntime.make(AppLayer);
 
 const app = new Hono();

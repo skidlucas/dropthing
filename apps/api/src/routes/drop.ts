@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Effect, Schema } from 'effect';
 import type { ManagedRuntime } from 'effect';
 import { DropService } from '../services/drop.js';
-import { InvalidInputError } from '@dropthing/shared';
+import { InvalidInputError, UUID } from '@dropthing/shared';
 import { withBasicErrorHandling } from '../helpers.js';
 
 // oxlint-disable-next-line typescript/no-explicit-any -- layer error type is complex, using any for simplicity
@@ -15,7 +15,7 @@ export default function dropRoutes(runtime: AppRuntime) {
     const program = withBasicErrorHandling(
       c,
       Effect.gen(function* () {
-        const id = yield* Schema.decodeUnknown(Schema.UUID)(c.req.param('id')).pipe(
+        const id = yield* Schema.decodeUnknownEffect(UUID)(c.req.param('id')).pipe(
           Effect.mapError((e) => new InvalidInputError({ message: e.message }))
         );
 

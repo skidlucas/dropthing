@@ -16,7 +16,7 @@
     "type-check": "tsc --build --noEmit",
     "compose": "docker compose up -d",
     "compose:down": "docker compose down",
-    "prepare": "husky"
+    "prepare": "husky && effect-language-service patch"
   },
   "devDependencies": {
     "@effect/language-service": "0.80.0",

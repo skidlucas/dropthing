@@ -8,12 +8,8 @@
   },
   "dependencies": {
     "@dropthing/shared": "workspace:*",
-    "@effect/experimental": "0.59.0",
-    "@effect/platform": "0.95.0",
-    "@effect/sql": "0.50.0",
-    "@effect/sql-pg": "0.51.0",
     "drizzle-orm": "1.0.0-beta.9-e89174b",
-    "effect": "3.20.0",
+    "effect": "4.0.0-beta.35",
     "hono": "4.12.8",
     "pg": "8.20.0"
   },

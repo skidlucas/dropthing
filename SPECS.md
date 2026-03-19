@@ -38,10 +38,10 @@ Files have a configurable time-to-live (max 1 week) and are automatically delete
 
 | Tool               | Version       | Role                                                                            |
 | ------------------ | ------------- | ------------------------------------------------------------------------------- |
-| **Effect**         | 3.20.0        | Core business logic: typed errors, services, layers, schemas, scheduling        |
+| **Effect**         | 4.0.0-beta.35 | Core business logic: typed errors, services, layers, schemas, scheduling        |
 | **Hono**           | 4.12.8        | Web framework (ultralight, Bun first-class support, Web Standards)              |
 | **Drizzle ORM**    | 1.0.0-beta.9  | Type-safe query builder with Effect integration (`drizzle-orm/effect-postgres`) |
-| **@effect/sql-pg** | 0.50.3        | Effect PgClient layer for PostgreSQL                                            |
+| **@effect/sql-pg** | 4.0.0-beta.35 | Effect PgClient layer for PostgreSQL                                            |
 
 ### Database
 
@@ -59,22 +59,22 @@ Storage is abstracted behind a `StorageService` (Effect Layer) — can be swappe
 
 ### Frontend
 
-| Tool             | Version | Role                                                                                |
-| ---------------- | ------- | ----------------------------------------------------------------------------------- |
-| **React**        | 19.x    | UI (familiarity choice — the goal is to learn Effect, not a new frontend framework) |
-| **Vite**         | 6.x     | Build tool                                                                          |
-| **shadcn/ui**    | latest  | Accessible, customizable UI components                                              |
-| **Tailwind CSS** | 4.x     | Utility-first styling                                                               |
-| **Effect**       | 3.20.0  | HttpClient for API calls (no TanStack Query — Effect handles the HTTP layer)        |
+| Tool             | Version       | Role                                                                                |
+| ---------------- | ------------- | ----------------------------------------------------------------------------------- |
+| **React**        | 19.x          | UI (familiarity choice — the goal is to learn Effect, not a new frontend framework) |
+| **Vite**         | 6.x           | Build tool                                                                          |
+| **shadcn/ui**    | latest        | Accessible, customizable UI components                                              |
+| **Tailwind CSS** | 4.x           | Utility-first styling                                                               |
+| **Effect**       | 4.0.0-beta.35 | HttpClient for API calls (no TanStack Query — Effect handles the HTTP layer)        |
 
 ### Linting & formatting
 
-| Tool             | Version | Role                                |
-| ---------------- | ------- | ----------------------------------- |
-| **oxlint**       | 1.55.0  | Linter                              |
-| **oxfmt**        | 0.40.0  | Formatter                           |
-| **husky**        | 9.1.7   | Git hooks                           |
-| **lint-staged**  | 16.4.0  | Run lint/format on staged files     |
+| Tool            | Version | Role                            |
+| --------------- | ------- | ------------------------------- |
+| **oxlint**      | 1.55.0  | Linter                          |
+| **oxfmt**       | 0.40.0  | Formatter                       |
+| **husky**       | 9.1.7   | Git hooks                       |
+| **lint-staged** | 16.4.0  | Run lint/format on staged files |
 
 Pre-commit hook runs `oxlint --fix` + `oxfmt --write` on staged files via lint-staged.
 
@@ -95,6 +95,7 @@ Pre-commit hook runs `oxlint --fix` + `oxfmt --write` on staged files via lint-s
 | **Coolify** | Self-hosted deployment platform, deploys via a single `docker-compose.prod.yml`                           |
 
 Two separate domains:
+
 - `dropthing.lukapps.fr` (web, Caddy static files on :8080)
 - `api.dropthing.lukapps.fr` (API on :3001)
 
@@ -127,8 +128,8 @@ dropthing/
 │   │       │   ├── health.ts   # GET /health
 │   │       │   └── drop.ts     # GET /drops/:id (+ future POST, GET file)
 │   │       └── services/
-│   │           ├── db.ts       # DrizzleService, PgClientLive, DrizzleLive
-│   │           └── drop.ts     # DropService, DropServiceLive
+│   │           ├── db.ts       # DrizzleService (ServiceMap.Service), PgClientLive
+│   │           └── drop.ts     # DropService (ServiceMap.Service)
 │   └── web/                    # React + Vite + shadcn — frontend
 │       ├── Dockerfile          # Multi-stage: oven/bun:1 (build) → caddy:2-alpine (serve)
 │       ├── Caddyfile           # Static file server
@@ -140,7 +141,7 @@ dropthing/
 │       └── src/
 │           ├── index.ts        # Re-exports schemas + errors
 │           ├── schemas.ts      # Drop schema (Effect Schema)
-│           └── errors.ts       # InvalidInputError (Data.TaggedError)
+│           └── errors.ts       # InvalidInputError (Schema.TaggedErrorClass)
 ```
 
 ---
@@ -150,8 +151,8 @@ dropthing/
 ### DropService
 
 - `save(drop)` — insert drop metadata into PG
-- `get(id)` — retrieve a drop by ID, decoded via `Schema.decodeUnknown(Drop)`
-- `listExpired()` — list all expired drops, decoded via `Schema.decodeUnknown(Schema.Array(Drop))`
+- `get(id)` — retrieve a drop by ID, decoded via `Schema.decodeUnknownEffect(Drop)`
+- `listExpired()` — list all expired drops, decoded via `Schema.decodeUnknownEffect(Schema.Array(Drop))`
 - `delete(id)` — delete a drop from PG
 - Uses `DrizzleService` as a dependency (injected via Layer)
 
@@ -179,31 +180,33 @@ dropthing/
 ### Tagged errors (shared)
 
 ```typescript
-// In @dropthing/shared/errors.ts
-class InvalidInputError extends Data.TaggedError("InvalidInputError")<{
-  message: string;
-}>
+// In @dropthing/shared/errors.ts — Effect v4 pattern
+class InvalidInputError extends Schema.TaggedErrorClass("InvalidInputError")(
+  "InvalidInputError",
+  { message: Schema.String }
+)
 ```
 
 ### Route error handling
 
 Routes use `withBasicErrorHandling` helper that pipes errors through:
-1. `catchTag("InvalidInputError")` → 400
-2. `catchTag("ParseError")` → 500
-3. `catchAll` → 500
 
-Input validation (e.g., UUID format) uses `Schema.decodeUnknown` + `Effect.mapError` to transform `ParseError` into `InvalidInputError`.
+1. `catchTag("InvalidInputError")` → 400
+2. `catchTag("SchemaError")` → 500
+3. `Effect.catch` → 500
+
+Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect.mapError` to transform `SchemaError` into `InvalidInputError`.
 
 ### Planned business errors
 
 ```typescript
 type AppError =
-  | FileTooLarge        // file > 300 MB
+  | FileTooLarge // file > 300 MB
   | UnsupportedMimeType // disallowed MIME type
-  | DropNotFound        // invalid or non-existent link
-  | DropExpired         // file has expired
+  | DropNotFound // invalid or non-existent link
+  | DropExpired // file has expired
   | StorageQuotaExceeded // R2 quota exceeded
-  | InvalidTTL;         // TTL out of bounds
+  | InvalidTTL; // TTL out of bounds
 ```
 
 ---
@@ -234,12 +237,12 @@ type AppError =
 
 ## Learning goals
 
-This project is a hands-on exercise for learning **Effect (v3 stable)**. Key concepts to practice:
+This project is a hands-on exercise for learning **Effect v4**. Key concepts to practice:
 
 - **Effect & pipe**: basic functional composition
-- **Schema**: typed input validation + runtime decoding (`Schema.decodeUnknown`)
-- **Typed errors**: explicit error modeling with `Data.TaggedError`, `catchTag`, `mapError`
-- **Service & Layer**: dependency injection (DrizzleService → DropService, centralized composition)
+- **Schema**: typed input validation + runtime decoding (`Schema.decodeUnknownEffect`)
+- **Typed errors**: explicit error modeling with `Schema.TaggedErrorClass`, `catchTag`, `mapError`
+- **ServiceMap.Service & Layer**: dependency injection (DrizzleService → DropService, centralized composition)
 - **ManagedRuntime**: shared runtime for Hono handlers, single DB connection pool
 - **Schedule**: periodic cleanup job
 - **Stream**: streaming upload/download of large files

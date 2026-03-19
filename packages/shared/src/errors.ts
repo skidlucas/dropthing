@@ -1,5 +1,8 @@
-import { Data } from 'effect';
+import { Schema } from 'effect';
 
-export class InvalidInputError extends Data.TaggedError('InvalidInputError')<{
-  message: string;
-}> {}
+export class InvalidInputError extends Schema.TaggedErrorClass('InvalidInputError')(
+  'InvalidInputError',
+  {
+    message: Schema.String,
+  }
+) {}

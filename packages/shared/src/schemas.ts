@@ -1,13 +1,15 @@
 import { Schema } from 'effect';
 
+export const UUID = Schema.String.pipe(Schema.check(Schema.isUUID()));
+
 export const Drop = Schema.Struct({
-  id: Schema.UUID,
+  id: UUID,
   fileName: Schema.String,
   mimeType: Schema.String,
   size: Schema.Int,
   storageKey: Schema.String,
-  createdAt: Schema.DateFromSelf,
-  expiresAt: Schema.DateFromSelf,
+  createdAt: Schema.Date,
+  expiresAt: Schema.Date,
 });
 
 export type Drop = typeof Drop.Type;

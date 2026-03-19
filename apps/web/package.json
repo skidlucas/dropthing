@@ -10,10 +10,9 @@
   },
   "dependencies": {
     "@dropthing/shared": "workspace:*",
-    "@effect/platform": "0.95.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "effect": "3.20.0",
+    "effect": "4.0.0-beta.35",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "3.5.0"

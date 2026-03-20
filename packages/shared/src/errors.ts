@@ -6,3 +6,12 @@ export class InvalidInputError extends Schema.TaggedErrorClass('InvalidInputErro
     message: Schema.String,
   }
 ) {}
+
+export class FileTooLargeError extends Schema.TaggedErrorClass('FileTooLargeError')(
+  'FileTooLargeError',
+  {
+    message: Schema.String,
+    maxSize: Schema.Number,
+    actualSize: Schema.Number,
+  }
+) {}

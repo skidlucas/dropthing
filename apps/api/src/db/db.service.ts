@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Effect, Layer, Schema, ServiceMap } from 'effect';
-import * as schema from '../db/schema.js';
+import * as schema from './schema.js';
 
 // Use an opaque type to avoid exposing drizzle's internal types
 // (which reference non-portable .bun/ paths)

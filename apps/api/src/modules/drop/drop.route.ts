@@ -1,67 +1,49 @@
-import path from 'node:path';
 import { Hono } from 'hono';
 import { Effect, Schema } from 'effect';
 import type { ManagedRuntime } from 'effect';
-import { DropService } from '../services/drop.js';
-import {
-  FileTooLargeError,
-  InvalidInputError,
-  MAX_FILE_SIZE,
-  UUID,
-  UploadParams,
-} from '@dropthing/shared';
-import { withBasicErrorHandling } from '../helpers.js';
+import { DropService, type CreateDropInput } from './drop.service.js';
+import { InvalidInputError, UUID, UploadParams } from '@dropthing/shared';
+import { withBasicErrorHandling } from '../../common/helpers.js';
 
 // oxlint-disable-next-line typescript/no-explicit-any -- layer error type is complex, using any for simplicity
 type AppRuntime = ManagedRuntime.ManagedRuntime<DropService, any>;
 
-// TODO: Replace with StorageService in Phase 3
-const UPLOADS_DIR = './uploads';
+const parseParams = Effect.fn('drops.parseParams')(function* (formData: FormData) {
+  return yield* Schema.decodeUnknownEffect(UploadParams)({
+    type: formData.get('type'),
+    expiresIn: formData.get('expiresIn'),
+  }).pipe(Effect.mapError((e) => new InvalidInputError({ message: e.message })));
+});
 
 export default function dropRoutes(runtime: AppRuntime) {
   const drops = new Hono();
 
   drops.post('/', async (c) => {
     const formData = await c.req.formData();
-    const file = formData.get('file') as File | null;
-    const expiresIn = formData.get('expiresIn') as string | null;
 
     const program = withBasicErrorHandling(
       c,
       Effect.gen(function* () {
-        if (!file) {
-          return yield* new InvalidInputError({ message: 'Missing file' });
-        }
-
-        if (file.size > MAX_FILE_SIZE) {
-          return yield* new FileTooLargeError({
-            message: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
-            maxSize: MAX_FILE_SIZE,
-            actualSize: file.size,
-          });
-        }
-
-        const params = yield* Schema.decodeUnknownEffect(UploadParams)({
-          expiresIn,
-        }).pipe(Effect.mapError((e) => new InvalidInputError({ message: e.message })));
-
-        const storageKey = `${crypto.randomUUID()}${path.extname(file.name)}`;
-
-        // Save file to local disk (will be replaced by StorageService in Phase 3)
-        yield* Effect.tryPromise({
-          try: () => Bun.write(`${UPLOADS_DIR}/${storageKey}`, file),
-          catch: () => new InvalidInputError({ message: 'Failed to save file' }),
-        });
-
+        const params = yield* parseParams(formData);
         const dropService = yield* DropService;
-        const drop = yield* dropService.create({
-          fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          size: file.size,
-          storageKey,
-          expiresIn: params.expiresIn,
-        });
 
+        let input: CreateDropInput;
+
+        if (params.type === 'file') {
+          const file = formData.get('file') as File | null;
+          if (!file) return yield* new InvalidInputError({ message: 'Missing file' });
+          input = { type: 'file', file, expiresIn: params.expiresIn };
+        } else {
+          const content = formData.get('content') as string | null;
+          if (!content) {
+            return yield* new InvalidInputError({
+              message: `Missing content for ${params.type} drop`,
+            });
+          }
+          input = { type: params.type, content, expiresIn: params.expiresIn };
+        }
+
+        const drop = yield* dropService.create(input);
         return c.json(drop, 201);
       })
     );

@@ -1,0 +1,100 @@
+import path from 'node:path';
+import { Effect, Layer, Schema, ServiceMap } from 'effect';
+import type { Drop } from '@dropthing/shared';
+import { FileTooLargeError, InvalidInputError, MAX_FILE_SIZE } from '@dropthing/shared';
+import { DropRepository } from './drop.repository.js';
+import type { DatabaseError } from '../../db/db.service.js';
+
+// TODO: Replace with StorageService in Phase 3
+const UPLOADS_DIR = './uploads';
+
+export type CreateDropInput =
+  | { readonly type: 'file'; readonly file: File; readonly expiresIn: number }
+  | { readonly type: 'text'; readonly content: string; readonly expiresIn: number }
+  | { readonly type: 'link'; readonly content: string; readonly expiresIn: number };
+
+type DropServiceShape = {
+  readonly create: (
+    input: CreateDropInput
+  ) => Effect.Effect<
+    Drop,
+    InvalidInputError | FileTooLargeError | DatabaseError | Schema.SchemaError
+  >;
+  readonly get: (id: string) => Effect.Effect<Drop | null, DatabaseError | Schema.SchemaError>;
+  readonly delete: (id: string) => Effect.Effect<void, DatabaseError>;
+  readonly listExpired: () => Effect.Effect<
+    ReadonlyArray<Drop>,
+    DatabaseError | Schema.SchemaError
+  >;
+};
+
+export class DropService extends ServiceMap.Service<DropService, DropServiceShape>()(
+  '@dropthing/DropService'
+) {
+  static readonly layer = Layer.effect(
+    DropService,
+    Effect.gen(function* () {
+      const repo = yield* DropRepository;
+
+      const create = Effect.fn('DropService.create')(function* (input: CreateDropInput) {
+        const expiresAt = new Date(Date.now() + input.expiresIn * 1000);
+
+        if (input.type === 'file') {
+          const { file } = input;
+
+          if (file.size > MAX_FILE_SIZE) {
+            return yield* new FileTooLargeError({
+              message: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
+              maxSize: MAX_FILE_SIZE,
+              actualSize: file.size,
+            });
+          }
+
+          const storageKey = `${crypto.randomUUID()}${path.extname(file.name)}`;
+
+          // TODO: Replace with StorageService in Phase 3
+          yield* Effect.tryPromise({
+            try: () => Bun.write(`${UPLOADS_DIR}/${storageKey}`, file),
+            catch: () => new InvalidInputError({ message: 'Failed to save file' }),
+          });
+
+          return yield* repo.insert({
+            type: input.type,
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            size: file.size,
+            storageKey,
+            expiresAt,
+          });
+        }
+
+        if (input.type === 'link') {
+          yield* Schema.decodeUnknownEffect(Schema.URLFromString)(input.content).pipe(
+            Effect.mapError(() => new InvalidInputError({ message: 'Invalid URL' }))
+          );
+        }
+
+        return yield* repo.insert({
+          type: input.type,
+          content: input.content,
+          expiresAt,
+        });
+      });
+
+      const get = Effect.fn('DropService.get')(function* (id: string) {
+        return yield* repo.findById(id);
+      });
+
+      const del = Effect.fn('DropService.delete')(function* (id: string) {
+        // TODO: Delete file from storage if it's a file drop
+        yield* repo.deleteById(id);
+      });
+
+      const listExpired = Effect.fn('DropService.listExpired')(function* () {
+        return yield* repo.findExpired();
+      });
+
+      return { create, get, delete: del, listExpired };
+    })
+  );
+}

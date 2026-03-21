@@ -1,14 +1,18 @@
-import { integer, pgTable, varchar, timestamp, index, uuid } from 'drizzle-orm/pg-core';
+import { integer, pgTable, text, varchar, timestamp, index, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const dropsTable = pgTable(
   'drops',
   {
     id: uuid().primaryKey().defaultRandom(),
-    fileName: varchar().notNull(),
-    mimeType: varchar().notNull(),
-    size: integer().notNull(),
-    storageKey: varchar().notNull(),
+    type: varchar({ enum: ['file', 'text', 'link'] })
+      .notNull()
+      .default('text'),
+    content: text(),
+    fileName: varchar(),
+    mimeType: varchar(),
+    size: integer(),
+    storageKey: varchar(),
     createdAt: timestamp().notNull().defaultNow(),
     expiresAt: timestamp()
       .notNull()

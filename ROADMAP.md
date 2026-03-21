@@ -10,33 +10,40 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 **New Effect concepts**: `Effect.gen`, `pipe`, `ServiceMap.Service`, `Layer`, `Layer.effect`, `Layer.provide`, `ManagedRuntime`
 
-- [x] Drizzle schema: `drops` table (id, fileName, mimeType, size, storageKey, createdAt, expiresAt)
-- [x] Drizzle Kit config + first migration
-- [x] DrizzleService layer via `ServiceMap.Service` (`services/db.ts`)
-- [x] DropService: create, get, listExpired, delete (`services/drop.ts`)
-- [x] Centralized layer composition in `index.ts` (DrizzleService.layer → DropService.layer)
+- [x] Drizzle schema: `drops` table (id, type, content, fileName, mimeType, size, storageKey, createdAt, expiresAt)
+- [x] Drizzle Kit config + migrations
+- [x] DrizzleService layer via `ServiceMap.Service` (`db/db.service.ts`)
+- [x] DropRepository: insert, findById, findExpired, deleteById (`modules/drop/drop.repository.ts`)
+- [x] DropService: create, get, delete, listExpired (`modules/drop/drop.service.ts`)
+- [x] Layered architecture: Route → DropService (business logic) → DropRepository (data access) → DrizzleService
+- [x] Centralized layer composition in `index.ts` (DrizzleService → DropRepository → DropService)
 - [x] ManagedRuntime for sharing DB pool across Hono handlers
 - [x] Runtime decoding with `Schema.decodeUnknownEffect(Drop)` — parse, don't validate
-- [x] Routes: `GET /drops/:id`, `POST /drops`, `DELETE /drops/:id`
+- [x] Routes: `POST /drops`, `GET /drops/:id`, `DELETE /drops/:id`
 - [x] Input validation: UUID check + `Effect.mapError` → `InvalidInputError`
 - [x] Error handling helper: `withBasicErrorHandling` (`catchTags`)
 - [x] Tagged errors: `InvalidInputError`, `FileTooLargeError`, `DatabaseError`
 - [x] Migrated from Effect v3 to v4.0.0-beta.35
 - [x] `query()` wrapper: bridges drizzle promises into Effect with `DatabaseError`
-- [x] `Effect.fn` for call-site tracing on all service methods
+- [x] `Effect.fn` for call-site tracing on all service/repository methods
 
 ---
 
-## Phase 2 — Schema validation & typed errors ✓
+## Phase 2 — Schema validation & multi-type drops ✓
 
-**Goal**: Validate inputs and model business errors explicitly.
+**Goal**: Validate inputs, model business errors, support 3 drop types.
 
-**New Effect concepts**: `Schema.NumberFromString`, `Schema.isBetween`, `Schema.TaggedErrorClass` (more variants), `Effect.tryPromise`
+**New Effect concepts**: `Schema.NumberFromString`, `Schema.isBetween`, `Schema.TaggedErrorClass`, `Schema.Literals`, `Schema.NullOr`, `Schema.URLFromString`, `Effect.tryPromise`
 
+- [x] 3 drop types: file, text (code snippets), link — discriminated via `type` column (default: `text`)
 - [x] `UploadParams` schema with `NumberFromString` + `isBetween` validation
+- [x] `DropType` union via `Schema.Literals(['file', 'text', 'link'])`
+- [x] `CreateDropInput` as discriminated union (`{ type: 'file'; file: File } | { type: 'text'; content: string } | ...`)
 - [x] `FileTooLargeError` tagged error with `maxSize`/`actualSize`
-- [x] Upload flow: multipart formData → validate → save file → insert DB → return drop
+- [x] Upload flow: multipart formData → validate → save file / validate URL → insert DB → return drop
 - [x] Constraints: `MAX_FILE_SIZE` (100MB), `MIN_TTL` (60s), `MAX_TTL` (7 days)
+- [x] Text drops preserve formatting (stored as-is in `content` column)
+- [x] Link drops validated via `Schema.URLFromString`
 - [ ] Define typed errors: `DropNotFound`, `DropExpired` (deferred to Phase 4)
 
 ---
@@ -47,9 +54,9 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 **New Effect concepts**: `Stream`, service composition, Layer swapping
 
-- [x] Local file storage in `uploads/` (inline in route, temporary)
+- [x] Local file storage in `uploads/` (inline in DropService, temporary)
 - [ ] StorageService interface: save, get, delete
-- [ ] LocalStorageLayer (filesystem) — extract from current route logic
+- [ ] LocalStorageLayer (filesystem) — extract from current DropService logic
 - [ ] R2StorageLayer — swap in Cloudflare R2 without touching business logic
 
 ---
@@ -72,7 +79,7 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 **New Effect concepts**: Effect `HttpClient` in the browser (already set up)
 
-- [ ] Upload form: file picker, TTL selector
+- [ ] Upload form: file picker, text editor, link input, TTL selector
 - [ ] Upload via Effect HttpClient → `POST /drops`
 - [ ] Display share link after successful upload
 - [ ] Copy-to-clipboard

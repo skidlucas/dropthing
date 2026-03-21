@@ -2,17 +2,19 @@
 
 ## Concept
 
-Personal web service for ephemeral file sharing. Share files between your own devices or quickly share content with friends via a unique link.
+Personal web service for ephemeral file sharing. Share files, text snippets, or links between your own devices or quickly share content with friends via a unique link.
 
-Files have a configurable time-to-live (max 1 week) and are automatically deleted upon expiration.
+Drops have a configurable time-to-live (max 1 week) and are automatically deleted upon expiration.
 
 ## Core features
 
-- **File upload**: photos, videos, text, any file type, max size 300 MB
-- **Unique share link**: each upload generates a unique URL for downloading the file
-- **Configurable TTL**: from a few hours up to 7 days, set at upload time
-- **Automatic cleanup**: periodic job that purges expired files (file + metadata)
-- **Streaming upload**: large file handling without loading into memory
+- **3 drop types**:
+  - **File**: photos, videos, any file type, max 100 MB
+  - **Text**: code snippets, notes — formatting preserved as-is
+  - **Link**: URL sharing with validation
+- **Unique share link**: each drop generates a unique URL
+- **Configurable TTL**: from 1 minute up to 7 days, set at upload time
+- **Automatic cleanup**: periodic job that purges expired drops (file + metadata)
 
 ## Future improvements
 
@@ -22,6 +24,7 @@ Files have a configurable time-to-live (max 1 week) and are automatically delete
 - On-the-fly image compression
 - Drag & drop UI
 - File preview (images, videos, text)
+- Streaming upload for large files
 
 ---
 
@@ -36,18 +39,18 @@ Files have a configurable time-to-live (max 1 week) and are automatically delete
 
 ### Backend
 
-| Tool               | Version       | Role                                                                            |
-| ------------------ | ------------- | ------------------------------------------------------------------------------- |
-| **Effect**         | 4.0.0-beta.35 | Core business logic: typed errors, services, layers, schemas, scheduling        |
-| **Hono**           | 4.12.8        | Web framework (ultralight, Bun first-class support, Web Standards)              |
-| **Drizzle ORM**    | 1.0.0-beta.9  | Type-safe query builder with Effect integration (`drizzle-orm/effect-postgres`) |
-| **@effect/sql-pg** | 4.0.0-beta.35 | Effect PgClient layer for PostgreSQL                                            |
+| Tool            | Version       | Role                                                                     |
+| --------------- | ------------- | ------------------------------------------------------------------------ |
+| **Effect**      | 4.0.0-beta.35 | Core business logic: typed errors, services, layers, schemas, scheduling |
+| **Hono**        | 4.12.8        | Web framework (ultralight, Bun first-class support, Web Standards)       |
+| **Drizzle ORM** | 1.0.0-beta.9  | Type-safe query builder via `drizzle-orm/node-postgres`                  |
+| **pg**          | latest        | PostgreSQL driver (promise-based, wrapped with `query()` into Effect)    |
 
 ### Database
 
-| Tool              | Role                                                          |
-| ----------------- | ------------------------------------------------------------- |
-| **PostgreSQL 18** | Metadata storage (ID, expiration, MIME type, size, file path) |
+| Tool              | Role                                                                    |
+| ----------------- | ----------------------------------------------------------------------- |
+| **PostgreSQL 18** | Metadata storage (ID, type, content, expiration, MIME type, size, path) |
 
 ### File storage
 
@@ -118,43 +121,69 @@ dropthing/
 │   ├── api/                    # Hono + Effect — backend API
 │   │   ├── .env                # Local dev env (DB_URL)
 │   │   ├── Dockerfile          # Multi-stage: oven/bun:1 (deps) → oven/bun:1-slim (runtime)
+│   │   ├── drizzle.config.ts   # Drizzle Kit config
 │   │   ├── tsconfig.json       # Extends root, composite: true
 │   │   └── src/
 │   │       ├── index.ts        # Hono app entrypoint, centralized layer composition
-│   │       ├── helpers.ts      # Shared route helpers (withBasicErrorHandling)
+│   │       ├── common/
+│   │       │   └── helpers.ts  # Shared route helpers (withBasicErrorHandling)
 │   │       ├── db/
-│   │       │   └── schema.ts   # Drizzle table definitions (dropsTable)
-│   │       ├── routes/
-│   │       │   ├── health.ts   # GET /health
-│   │       │   └── drop.ts     # GET /drops/:id (+ future POST, GET file)
-│   │       └── services/
-│   │           ├── db.ts       # DrizzleService (ServiceMap.Service), PgClientLive
-│   │           └── drop.ts     # DropService (ServiceMap.Service)
+│   │       │   ├── db.service.ts  # DrizzleService, DatabaseError, query() wrapper
+│   │       │   └── schema.ts     # Drizzle table definitions (dropsTable)
+│   │       └── modules/
+│   │           ├── drop/
+│   │           │   ├── drop.route.ts       # POST /drops, GET /drops/:id, DELETE /drops/:id
+│   │           │   ├── drop.service.ts     # Business logic (validation, file save, URL check)
+│   │           │   └── drop.repository.ts  # Data access (insert, findById, findExpired, deleteById)
+│   │           └── health/
+│   │               └── health.route.ts     # GET /health
 │   └── web/                    # React + Vite + shadcn — frontend
 │       ├── Dockerfile          # Multi-stage: oven/bun:1 (build) → caddy:2-alpine (serve)
 │       ├── Caddyfile           # Static file server
 │       ├── tsconfig.json       # Extends root, composite: true, jsx: react-jsx
 │       └── src/
 ├── packages/
-│   └── shared/                 # Effect schemas, types, errors
+│   └── shared/                 # Effect schemas, types, errors, constants
 │       ├── tsconfig.json       # Extends root, composite: true
 │       └── src/
-│           ├── index.ts        # Re-exports schemas + errors
-│           ├── schemas.ts      # Drop schema (Effect Schema)
-│           └── errors.ts       # InvalidInputError (Schema.TaggedErrorClass)
+│           ├── index.ts        # Re-exports schemas + errors + constants
+│           ├── schemas.ts      # Drop, DropType, UploadParams, UUID
+│           ├── errors.ts       # InvalidInputError, FileTooLargeError
+│           └── constants.ts    # MAX_FILE_SIZE, MIN_TTL, MAX_TTL
 ```
 
 ---
 
-## Effect services (backend)
+## Backend architecture
+
+### Layered architecture
+
+```
+Route (HTTP)          → parse FormData/params, construct CreateDropInput
+DropService (métier)  → validation, file save, expiresAt calculation, URL check
+DropRepository (data) → CRUD via drizzle, Schema decoding
+DrizzleService (infra)→ drizzle instance with node-postgres driver
+```
+
+Layer composition in `index.ts`:
+```
+DrizzleService.layer → DropRepository.layer → DropService.layer
+```
+
+### DropRepository
+
+- `insert(input)` — insert drop metadata into PG, return decoded Drop
+- `findById(id)` — retrieve a drop by ID, decoded via `Schema.decodeUnknownEffect(Drop)`
+- `findExpired()` — list all expired drops
+- `deleteById(id)` — delete a drop from PG
 
 ### DropService
 
-- `save(drop)` — insert drop metadata into PG
-- `get(id)` — retrieve a drop by ID, decoded via `Schema.decodeUnknownEffect(Drop)`
-- `listExpired()` — list all expired drops, decoded via `Schema.decodeUnknownEffect(Schema.Array(Drop))`
-- `delete(id)` — delete a drop from PG
-- Uses `DrizzleService` as a dependency (injected via Layer)
+- `create(input)` — validate input, save file to disk (if file type), validate URL (if link type), compute expiresAt, delegate to repository
+- `get(id)` — delegate to repository
+- `delete(id)` — delegate to repository (TODO: also delete file from storage)
+- `listExpired()` — delegate to repository
+- `CreateDropInput`: discriminated union (`{ type: 'file'; file: File } | { type: 'text'; content: string } | { type: 'link'; content: string }`)
 
 ### StorageService (planned)
 
@@ -165,15 +194,20 @@ dropthing/
 
 ### CleanupService (planned)
 
-- Purges expired files (R2 file + PG metadata)
+- Purges expired drops (storage file + PG metadata)
 - Runs periodically via Effect `Schedule`
 
-### UploadService (planned)
-
-- Orchestrates the full flow: validation → storage → metadata → return share link
-- Composes the other services
-
 ---
+
+## Drop types
+
+| Type   | Required fields     | Validation                          | Storage              |
+| ------ | ------------------- | ----------------------------------- | -------------------- |
+| `file` | `file` (File)       | Size ≤ 100 MB                       | Disk (→ R2 Phase 3)  |
+| `text` | `content` (string)  | Non-empty                           | DB `content` column  |
+| `link` | `content` (string)  | Valid URL (`Schema.URLFromString`)   | DB `content` column  |
+
+Default type: `text`
 
 ## Error handling
 
@@ -185,52 +219,56 @@ class InvalidInputError extends Schema.TaggedErrorClass("InvalidInputError")(
   "InvalidInputError",
   { message: Schema.String }
 )
+
+class FileTooLargeError extends Schema.TaggedErrorClass("FileTooLargeError")(
+  "FileTooLargeError",
+  { message: Schema.String, maxSize: Schema.Number, actualSize: Schema.Number }
+)
 ```
 
 ### Route error handling
 
-Routes use `withBasicErrorHandling` helper that pipes errors through:
+Routes use `withBasicErrorHandling` helper that pipes errors through `catchTags`:
 
-1. `catchTag("InvalidInputError")` → 400
-2. `catchTag("SchemaError")` → 500
-3. `Effect.catch` → 500
+| Error              | HTTP Status |
+| ------------------ | ----------- |
+| `InvalidInputError`| 400         |
+| `FileTooLargeError`| 413         |
+| `SchemaError`      | 500         |
+| `DatabaseError`    | 500         |
+| fallback           | 500         |
 
 Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect.mapError` to transform `SchemaError` into `InvalidInputError`.
 
 ### Planned business errors
 
-```typescript
-type AppError =
-  | FileTooLarge // file > 300 MB
-  | UnsupportedMimeType // disallowed MIME type
-  | DropNotFound // invalid or non-existent link
-  | DropExpired // file has expired
-  | StorageQuotaExceeded // R2 quota exceeded
-  | InvalidTTL; // TTL out of bounds
-```
+- `DropNotFound` — invalid or non-existent link
+- `DropExpired` — drop has expired
 
 ---
 
 ## Main flows
 
-### Upload
+### Upload (POST /drops)
 
-1. Validate parameters with `Schema` (size, type, TTL)
-2. Stream file upload to R2 via `StorageService`
-3. Save metadata in PG via `DropService`
-4. Return unique download link
+1. Parse `FormData`: extract `type`, `expiresIn` via `UploadParams` schema
+2. Extract `file` or `content` from FormData (route)
+3. DropService validates (file size / URL format)
+4. Save file to disk if file type
+5. Insert metadata in PG via DropRepository
+6. Return drop as JSON (201)
 
-### Download
+### Download (planned)
 
-1. Look up metadata via `DropService`
+1. Look up metadata via DropService
 2. Check expiration → `DropExpired` if past due
-3. Stream file from R2 via `StorageService`
+3. Stream file from StorageService
 
-### Cleanup
+### Cleanup (planned)
 
 1. Periodic job (`Schedule.spaced` or `Schedule.cron`)
-2. List expired drops in PG via `DropService.listExpired()`
-3. Delete files from R2
+2. List expired drops via `DropService.listExpired()`
+3. Delete files from storage
 4. Delete metadata from PG
 
 ---
@@ -241,9 +279,10 @@ This project is a hands-on exercise for learning **Effect v4**. Key concepts to 
 
 - **Effect & pipe**: basic functional composition
 - **Schema**: typed input validation + runtime decoding (`Schema.decodeUnknownEffect`)
-- **Typed errors**: explicit error modeling with `Schema.TaggedErrorClass`, `catchTag`, `mapError`
-- **ServiceMap.Service & Layer**: dependency injection (DrizzleService → DropService, centralized composition)
+- **Typed errors**: explicit error modeling with `Schema.TaggedErrorClass`, `catchTags`, `mapError`
+- **ServiceMap.Service & Layer**: dependency injection (DrizzleService → DropRepository → DropService)
 - **ManagedRuntime**: shared runtime for Hono handlers, single DB connection pool
 - **Schedule**: periodic cleanup job
 - **Stream**: streaming upload/download of large files
 - **Effect.all**: concurrent operations (e.g. cleanup of multiple files)
+- **Effect.fn**: call-site tracing on service/repository methods

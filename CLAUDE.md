@@ -1,6 +1,6 @@
 # dropthing
 
-Ephemeral file sharing service. Bun monorepo with Effect v3, Hono, Drizzle, React.
+Ephemeral file sharing service. Bun monorepo with Effect v4, Hono, Drizzle, React.
 
 ## Commands
 
@@ -30,6 +30,8 @@ Ephemeral file sharing service. Bun monorepo with Effect v3, Hono, Drizzle, Reac
 Topics: quick-start, project-setup, tsconfig, basics, services-and-layers, data-modeling, error-handling, config, testing, cli.
 
 Never guess at Effect patterns - check the guide first.
+
+**After writing or modifying Effect code**, always run `effect-solutions show <relevant-topics>` to verify the code respects best practices. This is a mandatory step, not optional.
 
 <!-- effect-solutions:end -->
 

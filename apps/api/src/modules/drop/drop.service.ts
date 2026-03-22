@@ -7,6 +7,15 @@ import type { DatabaseError } from '../../db/db.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { StorageError } from '@dropthing/shared';
 
+function generateStorageKey(fileName: string): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}/${month}/${day}/${crypto.randomUUID()}${path.extname(fileName)}`;
+}
+
 export type CreateDropInput =
   | { readonly type: 'file'; readonly file: File; readonly expiresIn: number }
   | { readonly type: 'text'; readonly content: string; readonly expiresIn: number }
@@ -52,7 +61,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
             });
           }
 
-          const storageKey = `${crypto.randomUUID()}${path.extname(file.name)}`;
+          const storageKey = generateStorageKey(file.name);
 
           yield* storage.save(storageKey, file);
 

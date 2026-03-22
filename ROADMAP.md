@@ -60,7 +60,8 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 - [x] `R2StorageLayer` — Cloudflare R2 via Bun's built-in `S3Client`
 - [x] DropService refactored to depend on `StorageService` (not inline storage)
 - [x] DropService.delete now cleans up storage files
-- [x] Env-based layer selection: `USE_R2=true` (default) → R2, `USE_R2=false` → local
+- [x] Env-based layer selection: `USE_R2=true` → R2, `USE_R2=false` → local
+- [x] Date-based storage keys: `year/month/day/uuid.ext` (zero-padded for lexicographic sort)
 - [x] Layer composition: `DrizzleService → DropRepository ─┐ StorageLayer ─┼→ DropService`
 
 ---

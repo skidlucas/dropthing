@@ -198,7 +198,7 @@ StorageLayer ───────────────────┼→ Dro
 
 ### StorageService
 
-- `save(key, data: Blob)` — save file to storage
+- `save(key, data: Blob)` — save file to storage (key format: `YYYY/MM/DD/uuid.ext`)
 - `get(key)` — read file as `Uint8Array`
 - `delete(key)` — delete file from storage
 - Interface only (no `static layer`) — implementations are separate files

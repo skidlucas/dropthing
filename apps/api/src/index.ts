@@ -9,7 +9,7 @@ import { R2StorageLayer } from './modules/storage/r2Storage.layer.js';
 import health from './modules/health/health.route.js';
 import dropRoutes from './modules/drop/drop.route.js';
 
-const useR2 = process.env.USE_R2 === 'true';
+const useR2 = process.env.USE_R2 !== 'false';
 const StorageLayer = useR2 ? R2StorageLayer : LocalStorageLayer;
 
 // Compose all layers at the entry point:

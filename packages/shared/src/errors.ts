@@ -15,3 +15,8 @@ export class FileTooLargeError extends Schema.TaggedErrorClass('FileTooLargeErro
     actualSize: Schema.Number,
   }
 ) {}
+
+export class StorageError extends Schema.TaggedErrorClass('StorageError')('StorageError', {
+  message: Schema.String,
+  error: Schema.Defect,
+}) {}

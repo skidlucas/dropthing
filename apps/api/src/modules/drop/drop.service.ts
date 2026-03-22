@@ -4,9 +4,8 @@ import type { Drop } from '@dropthing/shared';
 import { FileTooLargeError, InvalidInputError, MAX_FILE_SIZE } from '@dropthing/shared';
 import { DropRepository } from './drop.repository.js';
 import type { DatabaseError } from '../../db/db.service.js';
-
-// TODO: Replace with StorageService in Phase 3
-const UPLOADS_DIR = './uploads';
+import { StorageService } from '../storage/storage.service.js';
+import { StorageError } from '@dropthing/shared';
 
 export type CreateDropInput =
   | { readonly type: 'file'; readonly file: File; readonly expiresIn: number }
@@ -18,10 +17,12 @@ type DropServiceShape = {
     input: CreateDropInput
   ) => Effect.Effect<
     Drop,
-    InvalidInputError | FileTooLargeError | DatabaseError | Schema.SchemaError
+    InvalidInputError | FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError
   >;
   readonly get: (id: string) => Effect.Effect<Drop | null, DatabaseError | Schema.SchemaError>;
-  readonly delete: (id: string) => Effect.Effect<void, DatabaseError>;
+  readonly delete: (
+    id: string
+  ) => Effect.Effect<void, StorageError | DatabaseError | Schema.SchemaError>;
   readonly listExpired: () => Effect.Effect<
     ReadonlyArray<Drop>,
     DatabaseError | Schema.SchemaError
@@ -35,6 +36,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
     DropService,
     Effect.gen(function* () {
       const repo = yield* DropRepository;
+      const storage = yield* StorageService;
 
       const create = Effect.fn('DropService.create')(function* (input: CreateDropInput) {
         const expiresAt = new Date(Date.now() + input.expiresIn * 1000);
@@ -52,11 +54,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
 
           const storageKey = `${crypto.randomUUID()}${path.extname(file.name)}`;
 
-          // TODO: Replace with StorageService in Phase 3
-          yield* Effect.tryPromise({
-            try: () => Bun.write(`${UPLOADS_DIR}/${storageKey}`, file),
-            catch: () => new InvalidInputError({ message: 'Failed to save file' }),
-          });
+          yield* storage.save(storageKey, file);
 
           return yield* repo.insert({
             type: input.type,
@@ -86,7 +84,10 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
       });
 
       const del = Effect.fn('DropService.delete')(function* (id: string) {
-        // TODO: Delete file from storage if it's a file drop
+        const drop = yield* repo.findById(id);
+        if (drop?.storageKey) {
+          yield* storage.delete(drop.storageKey);
+        }
         yield* repo.deleteById(id);
       });
 

@@ -5,16 +5,20 @@ import { DropService } from './modules/drop/drop.service.js';
 import { DropRepository } from './modules/drop/drop.repository.js';
 import { DrizzleService } from './db/db.service.js';
 import { LocalStorageLayer } from './modules/storage/localStorage.layer.js';
+import { R2StorageLayer } from './modules/storage/r2Storage.layer.js';
 import health from './modules/health/health.route.js';
 import dropRoutes from './modules/drop/drop.route.js';
 
+const useR2 = process.env.USE_R2 === 'true';
+const StorageLayer = useR2 ? R2StorageLayer : LocalStorageLayer;
+
 // Compose all layers at the entry point:
 // DrizzleService → DropRepository ─┐
-// LocalStorageLayer ───────────────┼→ DropService
+// StorageLayer ────────────────────┼→ DropService
 const AppLayer = DropService.layer.pipe(
   Layer.provide(DropRepository.layer),
   Layer.provide(DrizzleService.layer),
-  Layer.provide(LocalStorageLayer)
+  Layer.provide(StorageLayer)
 );
 const runtime = ManagedRuntime.make(AppLayer);
 

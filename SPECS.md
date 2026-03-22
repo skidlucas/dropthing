@@ -57,8 +57,11 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 | Tool              | Role                                                                                  |
 | ----------------- | ------------------------------------------------------------------------------------- |
 | **Cloudflare R2** | S3-compatible object storage, **no egress fees** (ideal for file sharing), 10 GB free |
+| **Bun S3Client**  | Built-in S3-compatible client in Bun (no `@aws-sdk/client-s3` needed)                 |
 
-Storage is abstracted behind a `StorageService` (Effect Layer) — can be swapped to S3, MinIO, or local filesystem without touching business logic.
+Storage is abstracted behind a `StorageService` (Effect Layer). Two implementations available:
+- `LocalStorageLayer` — filesystem (`./uploads/`), used in dev (`USE_R2=false`)
+- `R2StorageLayer` — Cloudflare R2 via Bun's `S3Client`, used in prod (default)
 
 ### Frontend
 
@@ -119,7 +122,7 @@ dropthing/
 ├── .env                        # Root env for docker-compose.prod.yml (DB_URL, R2_*, CORS_ORIGIN, VITE_API_URL)
 ├── apps/
 │   ├── api/                    # Hono + Effect — backend API
-│   │   ├── .env                # Local dev env (DB_URL)
+│   │   ├── .env                # Local dev env (DB_URL, USE_R2, R2_*)
 │   │   ├── Dockerfile          # Multi-stage: oven/bun:1 (deps) → oven/bun:1-slim (runtime)
 │   │   ├── drizzle.config.ts   # Drizzle Kit config
 │   │   ├── tsconfig.json       # Extends root, composite: true
@@ -133,8 +136,12 @@ dropthing/
 │   │       └── modules/
 │   │           ├── drop/
 │   │           │   ├── drop.route.ts       # POST /drops, GET /drops/:id, DELETE /drops/:id
-│   │           │   ├── drop.service.ts     # Business logic (validation, file save, URL check)
+│   │           │   ├── drop.service.ts     # Business logic (validation, storage, URL check)
 │   │           │   └── drop.repository.ts  # Data access (insert, findById, findExpired, deleteById)
+│   │           ├── storage/
+│   │           │   ├── storage.service.ts     # StorageService interface + StorageError
+│   │           │   ├── localStorage.layer.ts  # Local filesystem implementation
+│   │           │   └── r2Storage.layer.ts     # Cloudflare R2 implementation (Bun S3Client)
 │   │           └── health/
 │   │               └── health.route.ts     # GET /health
 │   └── web/                    # React + Vite + shadcn — frontend
@@ -148,7 +155,7 @@ dropthing/
 │       └── src/
 │           ├── index.ts        # Re-exports schemas + errors + constants
 │           ├── schemas.ts      # Drop, DropType, UploadParams, UUID
-│           ├── errors.ts       # InvalidInputError, FileTooLargeError
+│           ├── errors.ts       # InvalidInputError, FileTooLargeError, StorageError
 │           └── constants.ts    # MAX_FILE_SIZE, MIN_TTL, MAX_TTL
 ```
 
@@ -159,16 +166,20 @@ dropthing/
 ### Layered architecture
 
 ```
-Route (HTTP)          → parse FormData/params, construct CreateDropInput
-DropService (métier)  → validation, file save, expiresAt calculation, URL check
-DropRepository (data) → CRUD via drizzle, Schema decoding
-DrizzleService (infra)→ drizzle instance with node-postgres driver
+Route (HTTP)            → parse FormData/params, construct CreateDropInput
+DropService (métier)    → validation, storage delegation, expiresAt, URL check
+DropRepository (data)   → CRUD via drizzle, Schema decoding
+StorageService (infra)  → save/get/delete files (LocalStorage or R2)
+DrizzleService (infra)  → drizzle instance with node-postgres driver
 ```
 
 Layer composition in `index.ts`:
 ```
-DrizzleService.layer → DropRepository.layer → DropService.layer
+DrizzleService → DropRepository ─┐
+StorageLayer ───────────────────┼→ DropService
 ```
+
+`StorageLayer` is selected at startup based on `USE_R2` env var.
 
 ### DropRepository
 
@@ -179,18 +190,19 @@ DrizzleService.layer → DropRepository.layer → DropService.layer
 
 ### DropService
 
-- `create(input)` — validate input, save file to disk (if file type), validate URL (if link type), compute expiresAt, delegate to repository
+- `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type), compute expiresAt, delegate to repository
 - `get(id)` — delegate to repository
-- `delete(id)` — delegate to repository (TODO: also delete file from storage)
+- `delete(id)` — delete file from StorageService (if file drop) + delete from repository
 - `listExpired()` — delegate to repository
 - `CreateDropInput`: discriminated union (`{ type: 'file'; file: File } | { type: 'text'; content: string } | { type: 'link'; content: string }`)
 
-### StorageService (planned)
+### StorageService
 
-- `save(file, key)` — upload to R2
-- `get(key)` — stream from R2
-- `delete(key)` — delete from R2
-- Abstracted behind a Layer, R2 today, swappable
+- `save(key, data: Blob)` — save file to storage
+- `get(key)` — read file as `Uint8Array`
+- `delete(key)` — delete file from storage
+- Interface only (no `static layer`) — implementations are separate files
+- Two implementations: `LocalStorageLayer` (filesystem), `R2StorageLayer` (Cloudflare R2 via Bun S3Client)
 
 ### CleanupService (planned)
 
@@ -203,7 +215,7 @@ DrizzleService.layer → DropRepository.layer → DropService.layer
 
 | Type   | Required fields     | Validation                          | Storage              |
 | ------ | ------------------- | ----------------------------------- | -------------------- |
-| `file` | `file` (File)       | Size ≤ 100 MB                       | Disk (→ R2 Phase 3)  |
+| `file` | `file` (File)       | Size ≤ 100 MB                       | StorageService (R2 or local) |
 | `text` | `content` (string)  | Non-empty                           | DB `content` column  |
 | `link` | `content` (string)  | Valid URL (`Schema.URLFromString`)   | DB `content` column  |
 
@@ -236,6 +248,7 @@ Routes use `withBasicErrorHandling` helper that pipes errors through `catchTags`
 | `FileTooLargeError`| 413         |
 | `SchemaError`      | 500         |
 | `DatabaseError`    | 500         |
+| `StorageError`     | 500         |
 | fallback           | 500         |
 
 Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect.mapError` to transform `SchemaError` into `InvalidInputError`.
@@ -254,7 +267,7 @@ Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect
 1. Parse `FormData`: extract `type`, `expiresIn` via `UploadParams` schema
 2. Extract `file` or `content` from FormData (route)
 3. DropService validates (file size / URL format)
-4. Save file to disk if file type
+4. Save file via StorageService if file type
 5. Insert metadata in PG via DropRepository
 6. Return drop as JSON (201)
 
@@ -280,8 +293,9 @@ This project is a hands-on exercise for learning **Effect v4**. Key concepts to 
 - **Effect & pipe**: basic functional composition
 - **Schema**: typed input validation + runtime decoding (`Schema.decodeUnknownEffect`)
 - **Typed errors**: explicit error modeling with `Schema.TaggedErrorClass`, `catchTags`, `mapError`
-- **ServiceMap.Service & Layer**: dependency injection (DrizzleService → DropRepository → DropService)
+- **ServiceMap.Service & Layer**: dependency injection (DrizzleService → DropRepository → DropService), Layer swapping (LocalStorage ↔ R2)
 - **ManagedRuntime**: shared runtime for Hono handlers, single DB connection pool
+- **Layer swapping**: same interface, multiple implementations, env-based selection at startup
 - **Schedule**: periodic cleanup job
 - **Stream**: streaming upload/download of large files
 - **Effect.all**: concurrent operations (e.g. cleanup of multiple files)

@@ -48,16 +48,20 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 ---
 
-## Phase 3 — Storage service & Layer swapping
+## Phase 3 — Storage service & Layer swapping ✓
 
 **Goal**: Extract storage into a service, swap implementations.
 
-**New Effect concepts**: `Stream`, service composition, Layer swapping
+**New Effect concepts**: Layer swapping, `Effect.try` vs `Effect.tryPromise`, service composition, env-based layer selection
 
-- [x] Local file storage in `uploads/` (inline in DropService, temporary)
-- [ ] StorageService interface: save, get, delete
-- [ ] LocalStorageLayer (filesystem) — extract from current DropService logic
-- [ ] R2StorageLayer — swap in Cloudflare R2 without touching business logic
+- [x] StorageService interface: `save`, `get`, `delete` — contract pur sans implémentation
+- [x] `StorageError` tagged error in `@dropthing/shared`
+- [x] `LocalStorageLayer` (filesystem) — `Bun.write`/`Bun.file`/`unlink`
+- [x] `R2StorageLayer` — Cloudflare R2 via Bun's built-in `S3Client`
+- [x] DropService refactored to depend on `StorageService` (not inline storage)
+- [x] DropService.delete now cleans up storage files
+- [x] Env-based layer selection: `USE_R2=true` (default) → R2, `USE_R2=false` → local
+- [x] Layer composition: `DrizzleService → DropRepository ─┐ StorageLayer ─┼→ DropService`
 
 ---
 

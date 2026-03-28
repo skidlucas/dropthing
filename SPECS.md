@@ -35,7 +35,7 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 | Tool           | Version | Notes                                                  |
 | -------------- | ------- | ------------------------------------------------------ |
 | **Bun**        | 1.3.9   | JavaScript runtime, package manager, native workspaces |
-| **TypeScript** | 5.9.3   |                                                        |
+| **TypeScript** | 6.0.2   |                                                        |
 
 ### Backend
 

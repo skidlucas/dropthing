@@ -1,11 +1,17 @@
 import path from 'node:path';
 import { Effect, Layer, Schema, ServiceMap } from 'effect';
 import type { Drop } from '@dropthing/shared';
-import { FileTooLargeError, InvalidInputError, MAX_FILE_SIZE } from '@dropthing/shared';
+import {
+  DropExpiredError,
+  DropNotFoundError,
+  FileTooLargeError,
+  InvalidInputError,
+  MAX_FILE_SIZE,
+  StorageError,
+} from '@dropthing/shared';
 import { DropRepository } from './drop.repository.js';
 import type { DatabaseError } from '../../db/db.service.js';
 import { StorageService } from '../storage/storage.service.js';
-import { StorageError } from '@dropthing/shared';
 
 function generateStorageKey(fileName: string): string {
   const date = new Date();
@@ -28,10 +34,26 @@ type DropServiceShape = {
     Drop,
     InvalidInputError | FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError
   >;
-  readonly get: (id: string) => Effect.Effect<Drop | null, DatabaseError | Schema.SchemaError>;
+  readonly get: (
+    id: string
+  ) => Effect.Effect<
+    Drop,
+    DropNotFoundError | DropExpiredError | DatabaseError | Schema.SchemaError
+  >;
+  readonly getFile: (
+    id: string
+  ) => Effect.Effect<
+    { drop: Drop; content: Uint8Array },
+    | DropNotFoundError
+    | DropExpiredError
+    | InvalidInputError
+    | StorageError
+    | DatabaseError
+    | Schema.SchemaError
+  >;
   readonly delete: (
     id: string
-  ) => Effect.Effect<void, StorageError | DatabaseError | Schema.SchemaError>;
+  ) => Effect.Effect<void, DropNotFoundError | StorageError | DatabaseError | Schema.SchemaError>;
   readonly listExpired: () => Effect.Effect<
     ReadonlyArray<Drop>,
     DatabaseError | Schema.SchemaError
@@ -89,12 +111,35 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
       });
 
       const get = Effect.fn('DropService.get')(function* (id: string) {
-        return yield* repo.findById(id);
+        const drop = yield* repo.findById(id);
+        if (!drop) {
+          return yield* new DropNotFoundError({ id });
+        }
+
+        if (drop.expiresAt < new Date()) {
+          return yield* new DropExpiredError({ id, expiredAt: drop.expiresAt });
+        }
+
+        return drop;
+      });
+
+      const getFile = Effect.fn('DropService.getFile')(function* (id: string) {
+        const drop = yield* get(id);
+
+        if (drop.type !== 'file' || !drop.storageKey) {
+          return yield* new InvalidInputError({ message: 'Drop is not a file' });
+        }
+
+        const content = yield* storage.get(drop.storageKey);
+        return { drop, content };
       });
 
       const del = Effect.fn('DropService.delete')(function* (id: string) {
         const drop = yield* repo.findById(id);
-        if (drop?.storageKey) {
+        if (!drop) {
+          return yield* new DropNotFoundError({ id });
+        }
+        if (drop.storageKey) {
           yield* storage.delete(drop.storageKey);
         }
         yield* repo.deleteById(id);
@@ -104,7 +149,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
         return yield* repo.findExpired();
       });
 
-      return { create, get, delete: del, listExpired };
+      return { create, get, getFile, delete: del, listExpired };
     })
   );
 }

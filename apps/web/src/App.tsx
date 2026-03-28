@@ -1,40 +1,13 @@
-import { useEffect, useState } from 'react';
-import { Effect } from 'effect';
-import { FetchHttpClient, HttpClient } from 'effect/unstable/http';
-
-const API_URL = import.meta.env.VITE_API_URL || '/api';
-
-const healthCheck = Effect.gen(function* () {
-  const client = yield* HttpClient.HttpClient;
-  const response = yield* client.get(`${API_URL}/health`);
-  return yield* response.json;
-}).pipe(Effect.provide(FetchHttpClient.layer));
+import { UploadPage } from '@/pages/UploadPage';
+import { DropPage } from '@/pages/DropPage';
 
 export function App() {
-  const [status, setStatus] = useState<string | null>(null);
+  const path = window.location.pathname;
+  const dropMatch = path.match(/^\/drops\/([a-f0-9-]+)$/);
 
-  useEffect(() => {
-    Effect.runPromise(healthCheck)
-      .then((data) => setStatus((data as { status: string }).status))
-      .catch(() => setStatus('error'));
-  }, []);
+  if (dropMatch) {
+    return <DropPage id={dropMatch[1]} />;
+  }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-950 text-neutral-50">
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold tracking-tight">dropthing</h1>
-        <p className="text-neutral-400">drop and share your files</p>
-        <div className="text-sm text-neutral-500">
-          API:{' '}
-          {status === null ? (
-            <span className="text-neutral-500">...</span>
-          ) : status === 'ok' ? (
-            <span className="text-green-500">connected</span>
-          ) : (
-            <span className="text-red-500">error</span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return <UploadPage />;
 }

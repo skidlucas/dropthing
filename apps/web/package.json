@@ -9,7 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@codemirror/language": "6.12.3",
+    "@codemirror/language-data": "6.5.2",
+    "@codemirror/state": "6.6.0",
     "@dropthing/shared": "workspace:*",
+    "@uiw/codemirror-theme-tokyo-night": "4.25.9",
+    "@uiw/react-codemirror": "4.25.9",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "effect": "4.0.0-beta.35",

@@ -61,9 +61,33 @@ export default function dropRoutes(runtime: AppRuntime) {
 
         const dropService = yield* DropService;
         const drop = yield* dropService.get(id);
-        if (!drop) return c.json({ error: 'Drop not found' }, 404);
 
         return c.json(drop);
+      })
+    );
+
+    return runtime.runPromise(program);
+  });
+
+  drops.get('/:id/file', async (c) => {
+    const program = withBasicErrorHandling(
+      c,
+      Effect.gen(function* () {
+        const id = yield* Schema.decodeUnknownEffect(UUID)(c.req.param('id')).pipe(
+          Effect.mapError((e) => new InvalidInputError({ message: e.message }))
+        );
+
+        const dropService = yield* DropService;
+        const { drop, content } = yield* dropService.getFile(id);
+
+        return new Response(Buffer.from(content), {
+          status: 200,
+          headers: {
+            'Content-Type': drop.mimeType ?? 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${drop.fileName}"`,
+            'Content-Length': content.length.toString(),
+          },
+        });
       })
     );
 
@@ -79,9 +103,6 @@ export default function dropRoutes(runtime: AppRuntime) {
         );
 
         const dropService = yield* DropService;
-        const drop = yield* dropService.get(id);
-        if (!drop) return c.json({ error: 'Drop not found' }, 404);
-
         yield* dropService.delete(id);
 
         return c.json({ message: 'Drop deleted' }, 200);
@@ -90,8 +111,6 @@ export default function dropRoutes(runtime: AppRuntime) {
 
     return runtime.runPromise(program);
   });
-
-  // TODO: GET /:id/file — download
 
   return drops;
 }

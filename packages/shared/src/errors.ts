@@ -20,3 +20,18 @@ export class StorageError extends Schema.TaggedErrorClass('StorageError')('Stora
   message: Schema.String,
   error: Schema.Defect,
 }) {}
+
+export class DropNotFoundError extends Schema.TaggedErrorClass('DropNotFoundError')(
+  'DropNotFoundError',
+  {
+    id: Schema.String,
+  }
+) {}
+
+export class DropExpiredError extends Schema.TaggedErrorClass('DropExpiredError')(
+  'DropExpiredError',
+  {
+    id: Schema.String,
+    expiredAt: Schema.Date,
+  }
+) {}

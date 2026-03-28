@@ -44,7 +44,6 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 - [x] Constraints: `MAX_FILE_SIZE` (100MB), `MIN_TTL` (60s), `MAX_TTL` (7 days)
 - [x] Text drops preserve formatting (stored as-is in `content` column)
 - [x] Link drops validated via `Schema.URLFromString`
-- [ ] Define typed errors: `DropNotFound`, `DropExpired` (deferred to Phase 4)
 
 ---
 
@@ -66,32 +65,54 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 ---
 
-## Phase 4 — Download flow
+## Phase 4 — Download flow & typed domain errors ✓
 
-**Goal**: Complete the core loop (upload → share → download).
+**Goal**: Complete the core loop (upload → share → download), typed error handling.
 
-**New Effect concepts**: error matching/recovery (`Effect.catchTag` — deeper usage)
+**New Effect concepts**: domain errors with `Schema.TaggedErrorClass`, `return yield*` for type narrowing, `catchTags` for centralized HTTP error mapping, transitive error propagation through service composition
 
-- [ ] API route: `GET /drops/:id/file` — stream file from storage
-- [ ] Handle `DropNotFound` and `DropExpired` with proper HTTP responses
-- [ ] Frontend: download page at `/drops/:id` (fetch metadata, display info, download button)
-
----
-
-## Phase 5 — Frontend upload UI
-
-**Goal**: Functional upload page.
-
-**New Effect concepts**: Effect `HttpClient` in the browser (already set up)
-
-- [ ] Upload form: file picker, text editor, link input, TTL selector
-- [ ] Upload via Effect HttpClient → `POST /drops`
-- [ ] Display share link after successful upload
-- [ ] Copy-to-clipboard
+- [x] `DropNotFoundError` and `DropExpiredError` tagged errors in `@dropthing/shared`
+- [x] `DropService.get` refactored: returns `Drop` (not `Drop | null`), yields typed errors
+- [x] `DropService.getFile` — fetches drop + file content from StorageService
+- [x] `DropService.delete` — bypasses expiration check (uses `repo.findById` directly)
+- [x] API route: `GET /drops/:id/file` — download with `Content-Type`, `Content-Disposition`, `Content-Length`
+- [x] `withBasicErrorHandling` updated: `DropNotFoundError` → 404, `DropExpiredError` → 410
+- [x] Routes simplified: no more manual `if (!drop)` checks — errors handled by `catchTags`
 
 ---
 
-## Phase 6 — Automatic cleanup
+## Phase 5 — Frontend ✓
+
+**Goal**: Functional upload & view pages with code editor.
+
+- [x] Upload form: file drop zone (drag & drop), CodeMirror 6 text editor, TTL selector
+- [x] 2 tabs: File | Text (link auto-detected from text content)
+- [x] CodeMirror 6 with Tokyo Night theme, language selector, lazy-loaded grammars
+- [x] Auto-detect URLs in text content → sent as `type: 'link'` transparently
+- [x] Display share link after successful upload + copy-to-clipboard
+- [x] Drop view page: CodeMirror read-only for text, download button for files, clickable link for URLs
+- [x] Simple URL-based routing (no react-router — 2 pages only)
+- [x] Responsive container: `max-w-md` for file/link drops, `max-w-2xl` for text drops
+
+---
+
+## Phase 6 — AI-powered metadata (Groq)
+
+**Goal**: Enrich drops with AI-generated metadata at creation time.
+
+**New Effect concepts**: external API integration via `Effect.tryPromise`, JSONB metadata column, service composition with optional/fallback behavior
+
+- [ ] Add `metadata` JSONB column to `drops` table (nullable) — polymorphic per drop type
+- [ ] `AiService` Effect service wrapping Groq API (fast LLM inference)
+- [ ] Detect programming language for text drops (replaces heuristic-based detection)
+- [ ] Auto-generate short title for all drop types
+- [ ] Called in `DropService.create()` — single Groq call returns `{ language, title }`
+- [ ] Frontend: display `metadata.language` for syntax highlighting, `metadata.title` instead of generic label
+- [ ] Graceful degradation: if Groq fails, drop is created without metadata (no blocking)
+
+---
+
+## Phase 7 — Automatic cleanup
 
 **Goal**: Periodic background job, concurrent operations.
 
@@ -103,11 +124,10 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 ---
 
-## Phase 7 — Polish & nice-to-haves
+## Phase 8 — Polish & nice-to-haves
 
 Pick from:
 
-- [ ] Drag & drop upload
 - [ ] File preview (images, videos, text)
 - [ ] QR code generation for share links
 - [ ] Password-protected shares

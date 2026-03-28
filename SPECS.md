@@ -10,11 +10,12 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 
 - **3 drop types**:
   - **File**: photos, videos, any file type, max 100 MB
-  - **Text**: code snippets, notes — formatting preserved as-is
-  - **Link**: URL sharing with validation
+  - **Text**: code snippets, notes — CodeMirror 6 editor with syntax highlighting
+  - **Link**: URL sharing — auto-detected from text content (no separate tab)
 - **Unique share link**: each drop generates a unique URL
 - **Configurable TTL**: from 1 minute up to 7 days, set at upload time
 - **Automatic cleanup**: periodic job that purges expired drops (file + metadata)
+- **AI metadata** (planned): language detection + title generation via Groq
 
 ## Future improvements
 
@@ -22,7 +23,6 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 - Download count limit
 - QR code for sharing links between devices
 - On-the-fly image compression
-- Drag & drop UI
 - File preview (images, videos, text)
 - Streaming upload for large files
 
@@ -65,13 +65,19 @@ Storage is abstracted behind a `StorageService` (Effect Layer). Two implementati
 
 ### Frontend
 
-| Tool             | Version       | Role                                                                                |
-| ---------------- | ------------- | ----------------------------------------------------------------------------------- |
-| **React**        | 19.x          | UI (familiarity choice — the goal is to learn Effect, not a new frontend framework) |
-| **Vite**         | 6.x           | Build tool                                                                          |
-| **shadcn/ui**    | latest        | Accessible, customizable UI components                                              |
-| **Tailwind CSS** | 4.x           | Utility-first styling                                                               |
-| **Effect**       | 4.0.0-beta.35 | HttpClient for API calls (no TanStack Query — Effect handles the HTTP layer)        |
+| Tool                          | Version | Role                                                                                |
+| ----------------------------- | ------- | ----------------------------------------------------------------------------------- |
+| **React**                     | 19.x    | UI (familiarity choice — the goal is to learn Effect, not a new frontend framework) |
+| **Vite**                      | 6.x     | Build tool                                                                          |
+| **Tailwind CSS**              | 4.x     | Utility-first styling                                                               |
+| **CodeMirror 6**              | 4.25.9  | Code editor (via `@uiw/react-codemirror`) with Tokyo Night theme                   |
+| **@codemirror/language-data** | 6.5.2   | Lazy-loaded language grammars for syntax highlighting                               |
+
+### AI (planned)
+
+| Tool     | Role                                                            |
+| -------- | --------------------------------------------------------------- |
+| **Groq** | Fast LLM inference (LPU) — language detection + title generation |
 
 ### Linting & formatting
 
@@ -135,7 +141,7 @@ dropthing/
 │   │       │   └── schema.ts     # Drizzle table definitions (dropsTable)
 │   │       └── modules/
 │   │           ├── drop/
-│   │           │   ├── drop.route.ts       # POST /drops, GET /drops/:id, DELETE /drops/:id
+│   │           │   ├── drop.route.ts       # POST /drops, GET /drops/:id, GET /drops/:id/file, DELETE /drops/:id
 │   │           │   ├── drop.service.ts     # Business logic (validation, storage, URL check)
 │   │           │   └── drop.repository.ts  # Data access (insert, findById, findExpired, deleteById)
 │   │           ├── storage/
@@ -144,11 +150,19 @@ dropthing/
 │   │           │   └── r2Storage.layer.ts     # Cloudflare R2 implementation (Bun S3Client)
 │   │           └── health/
 │   │               └── health.route.ts     # GET /health
-│   └── web/                    # React + Vite + shadcn — frontend
+│   └── web/                    # React + Vite — frontend
 │       ├── Dockerfile          # Multi-stage: oven/bun:1 (build) → caddy:2-alpine (serve)
 │       ├── Caddyfile           # Static file server
 │       ├── tsconfig.json       # Extends root, composite: true, jsx: react-jsx
 │       └── src/
+│           ├── App.tsx         # URL-based routing (/ → UploadPage, /drops/:id → DropPage)
+│           ├── lib/
+│           │   └── api.ts      # API client (createDrop, getDrop, getFileUrl, isUrl, helpers)
+│           ├── components/
+│           │   └── code-editor.tsx  # CodeMirror 6 wrapper (Tokyo Night, lazy language loading)
+│           └── pages/
+│               ├── UploadPage.tsx   # File drop zone + CodeMirror editor + TTL selector
+│               └── DropPage.tsx     # View/download page (file, text, link)
 ├── packages/
 │   └── shared/                 # Effect schemas, types, errors, constants
 │       ├── tsconfig.json       # Extends root, composite: true
@@ -171,12 +185,14 @@ DropService (métier)    → validation, storage delegation, expiresAt, URL chec
 DropRepository (data)   → CRUD via drizzle, Schema decoding
 StorageService (infra)  → save/get/delete files (LocalStorage or R2)
 DrizzleService (infra)  → drizzle instance with node-postgres driver
+AiService (infra)       → Groq API for metadata generation (planned)
 ```
 
 Layer composition in `index.ts`:
 ```
 DrizzleService → DropRepository ─┐
 StorageLayer ───────────────────┼→ DropService
+AiService (planned) ────────────┘
 ```
 
 `StorageLayer` is selected at startup based on `USE_R2` env var.
@@ -190,9 +206,10 @@ StorageLayer ───────────────────┼→ Dro
 
 ### DropService
 
-- `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type), compute expiresAt, delegate to repository
-- `get(id)` — delegate to repository
-- `delete(id)` — delete file from StorageService (if file drop) + delete from repository
+- `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type), compute expiresAt, delegate to repository. (Planned: enrich with AI metadata)
+- `get(id)` — find drop, yield `DropNotFoundError` if missing, yield `DropExpiredError` if expired
+- `getFile(id)` — calls `get`, validates it's a file drop, returns `{ drop, content }` from StorageService
+- `delete(id)` — bypasses expiration (uses `repo.findById`), deletes storage file + DB record
 - `listExpired()` — delegate to repository
 - `CreateDropInput`: discriminated union (`{ type: 'file'; file: File } | { type: 'text'; content: string } | { type: 'link'; content: string }`)
 
@@ -204,10 +221,88 @@ StorageLayer ───────────────────┼→ Dro
 - Interface only (no `static layer`) — implementations are separate files
 - Two implementations: `LocalStorageLayer` (filesystem), `R2StorageLayer` (Cloudflare R2 via Bun S3Client)
 
+### AiService (planned)
+
+- Wraps Groq API for fast LLM inference
+- `enrichDrop(content, type)` → `{ language?: string, title: string }`
+- Called during `DropService.create()` for all drop types
+- Graceful degradation: if Groq call fails, drop is created without metadata
+
 ### CleanupService (planned)
 
 - Purges expired drops (storage file + PG metadata)
 - Runs periodically via Effect `Schedule`
+
+---
+
+## Frontend architecture
+
+### Routing
+
+Simple URL-based routing in `App.tsx` (no react-router):
+- `/` → `UploadPage`
+- `/drops/:id` → `DropPage`
+
+### UploadPage
+
+- **2 tabs**: File | Text
+- **File tab**: drag & drop zone with `<button>` element (a11y), file picker fallback
+- **Text tab**: CodeMirror 6 editor (Tokyo Night theme) + language selector dropdown
+- **Auto-detect URL**: if text content is a single valid HTTP(S) URL → sent as `type: 'link'` transparently, with "Link detected" indicator
+- **TTL selector**: 5 min / 1 hour / 1 day / 7 days
+- **After upload**: shows share link + copy-to-clipboard + "Drop another" reset
+
+### DropPage
+
+- **File drops**: file name, size, expiry time, download button (`max-w-md`)
+- **Text drops**: CodeMirror 6 read-only viewer, copy button (`max-w-2xl` for code readability). Language highlighting planned via AI-detected `metadata.language`
+- **Link drops**: clickable URL, open + copy buttons (`max-w-md`)
+- **Error states**: 404 / 410 / generic error with back-to-home link
+
+### CodeEditor component
+
+Shared wrapper around `@uiw/react-codemirror`:
+- Tokyo Night theme
+- Lazy-loaded language grammars via `@codemirror/language-data`
+- Configurable: `readOnly`, `language`, `placeholder`, `minHeight`, `maxHeight`
+- Handles `exactOptionalPropertyTypes` via conditional spread
+
+---
+
+## Data model
+
+### drops table
+
+| Column      | Type            | Notes                                          |
+| ----------- | --------------- | ---------------------------------------------- |
+| `id`        | UUID PK         | `gen_random_uuid()`                            |
+| `type`      | VARCHAR         | `'file' \| 'text' \| 'link'`, default `'text'` |
+| `content`   | TEXT nullable   | Text/link content                              |
+| `fileName`  | VARCHAR nullable| Original file name                             |
+| `mimeType`  | VARCHAR nullable| MIME type for files                            |
+| `size`      | INTEGER nullable| File size in bytes                             |
+| `storageKey`| VARCHAR nullable| R2/local path (`YYYY/MM/DD/uuid.ext`)          |
+| `metadata`  | JSONB nullable  | (planned) AI-generated: `{ language?, title }` |
+| `createdAt` | TIMESTAMP       | `now()`                                        |
+| `expiresAt` | TIMESTAMP       | `createdAt + TTL`                              |
+
+### metadata JSONB (planned)
+
+Polymorphic per drop type, no fixed schema enforced at DB level (validated by Effect Schema in app).
+
+```jsonb
+-- text drop with code
+{ "language": "TypeScript", "title": "Express auth middleware" }
+
+-- text drop with plain text
+{ "title": "Shopping list for Saturday" }
+
+-- link drop
+{ "title": "Tailwind CSS documentation" }
+
+-- file drop
+{ "title": "Screenshot of the bug" }
+```
 
 ---
 
@@ -219,7 +314,7 @@ StorageLayer ───────────────────┼→ Dro
 | `text` | `content` (string)  | Non-empty                           | DB `content` column  |
 | `link` | `content` (string)  | Valid URL (`Schema.URLFromString`)   | DB `content` column  |
 
-Default type: `text`
+Default type: `text`. Link type is auto-detected from text content on the frontend.
 
 ## Error handling
 
@@ -246,6 +341,8 @@ Routes use `withBasicErrorHandling` helper that pipes errors through `catchTags`
 | ------------------ | ----------- |
 | `InvalidInputError`| 400         |
 | `FileTooLargeError`| 413         |
+| `DropNotFoundError`| 404         |
+| `DropExpiredError`  | 410         |
 | `SchemaError`      | 500         |
 | `DatabaseError`    | 500         |
 | `StorageError`     | 500         |
@@ -253,10 +350,10 @@ Routes use `withBasicErrorHandling` helper that pipes errors through `catchTags`
 
 Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect.mapError` to transform `SchemaError` into `InvalidInputError`.
 
-### Planned business errors
+### Domain errors
 
-- `DropNotFound` — invalid or non-existent link
-- `DropExpired` — drop has expired
+- `DropNotFoundError` — drop does not exist (404)
+- `DropExpiredError` — drop has expired, includes `expiredAt` date (410)
 
 ---
 
@@ -268,14 +365,18 @@ Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect
 2. Extract `file` or `content` from FormData (route)
 3. DropService validates (file size / URL format)
 4. Save file via StorageService if file type
-5. Insert metadata in PG via DropRepository
-6. Return drop as JSON (201)
+5. (Planned) Call AiService to generate metadata (language, title)
+6. Insert metadata in PG via DropRepository
+7. Return drop as JSON (201)
 
-### Download (planned)
+### Download (GET /drops/:id/file)
 
-1. Look up metadata via DropService
-2. Check expiration → `DropExpired` if past due
-3. Stream file from StorageService
+1. Validate UUID, call `DropService.getFile(id)`
+2. Service checks not-found → `DropNotFoundError` (404)
+3. Service checks expiration → `DropExpiredError` (410)
+4. Service checks it's a file drop → `InvalidInputError` (400)
+5. Fetch content from StorageService
+6. Return `Response` with `Content-Type`, `Content-Disposition: attachment`, `Content-Length`
 
 ### Cleanup (planned)
 

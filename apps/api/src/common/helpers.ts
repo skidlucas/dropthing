@@ -7,6 +7,8 @@ export const withBasicErrorHandling = <A, R>(c: HonoContext, effect: Effect.Effe
     Effect.catchTags({
       InvalidInputError: (e) => Effect.succeed(c.json({ error: e.message }, 400)),
       FileTooLargeError: (e) => Effect.succeed(c.json({ error: e.message }, 413)),
+      DropNotFoundError: (e) => Effect.succeed(c.json({ error: `Drop ${e.id} not found` }, 404)),
+      DropExpiredError: (e) => Effect.succeed(c.json({ error: `Drop ${e.id} has expired` }, 410)),
       SchemaError: (e) => Effect.succeed(c.json({ error: e.message }, 500)),
       DatabaseError: (e) => Effect.succeed(c.json({ error: e.message }, 500)),
       StorageError: (e) => Effect.succeed(c.json({ error: e.message }, 500)),

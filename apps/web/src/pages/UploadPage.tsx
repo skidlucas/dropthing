@@ -1,6 +1,7 @@
 import { useState, useRef, type DragEvent } from 'react';
-import { createDrop, TTL_OPTIONS, formatSize, isUrl, type Drop } from '@/lib/api';
+import { createDrop, TTL_OPTIONS, formatSize, isUrl } from '@/lib/api';
 import { CodeEditor, languages } from '@/components/code-editor';
+import type { DropJson } from '@dropthing/shared';
 
 type UploadMode = 'file' | 'text';
 
@@ -13,7 +14,7 @@ export function UploadPage() {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Drop | null>(null);
+  const [result, setResult] = useState<DropJson | null>(null);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -75,7 +76,8 @@ export function UploadPage() {
           <div className="text-center space-y-2">
             <div className="text-green-400 text-lg font-medium">Uploaded</div>
             <p className="text-neutral-400 text-sm">
-              {result.type === 'file' ? result.fileName : result.type} drop
+              {result.metadata?.title ??
+                (result.type === 'file' ? result.fileName : result.type + ' drop')}
             </p>
           </div>
 

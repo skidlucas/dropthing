@@ -1,23 +1,13 @@
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+import type { DropJson } from '@dropthing/shared';
 
-export interface Drop {
-  id: string;
-  type: 'file' | 'text' | 'link';
-  content: string | null;
-  fileName: string | null;
-  mimeType: string | null;
-  size: number | null;
-  storageKey: string | null;
-  createdAt: string;
-  expiresAt: string;
-}
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export async function createDrop(data: {
   type: 'file' | 'text' | 'link';
   expiresIn: number;
   file?: File | undefined;
   content?: string | undefined;
-}): Promise<Drop> {
+}): Promise<DropJson> {
   const formData = new FormData();
   formData.append('type', data.type);
   formData.append('expiresIn', String(data.expiresIn));
@@ -41,7 +31,7 @@ export async function createDrop(data: {
   return res.json();
 }
 
-export async function getDrop(id: string): Promise<Drop> {
+export async function getDrop(id: string): Promise<DropJson> {
   const res = await fetch(`${API_URL}/drops/${id}`);
 
   if (!res.ok) {

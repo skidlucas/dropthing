@@ -1,6 +1,6 @@
 import { Effect, Layer, Schema, ServiceMap } from 'effect';
 import { eq, lt } from 'drizzle-orm';
-import type { DropType } from '@dropthing/shared';
+import type { DropType, DropMetadata } from '@dropthing/shared';
 import { Drop } from '@dropthing/shared';
 import { dropsTable } from '../../db/schema.js';
 import { DatabaseError, DrizzleService, query } from '../../db/db.service.js';
@@ -16,6 +16,7 @@ export interface InsertDropInput {
   readonly mimeType?: string | null;
   readonly size?: number | null;
   readonly storageKey?: string | null;
+  readonly metadata?: DropMetadata | null;
 }
 
 type DropRepositoryShape = {
@@ -47,6 +48,7 @@ export class DropRepository extends ServiceMap.Service<DropRepository, DropRepos
           mimeType: input.mimeType ?? null,
           size: input.size ?? null,
           storageKey: input.storageKey ?? null,
+          metadata: input.metadata ?? null,
           createdAt: new Date(),
           expiresAt: input.expiresAt,
         };

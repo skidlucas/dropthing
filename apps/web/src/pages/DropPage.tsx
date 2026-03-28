@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { getDrop, getFileUrl, formatSize, timeRemaining, type Drop } from '@/lib/api';
+import type { DropJson } from '@dropthing/shared';
+import { getDrop, getFileUrl, formatSize, timeRemaining } from '@/lib/api';
 import { CodeEditor } from '@/components/code-editor';
 
 export function DropPage({ id }: { id: string }) {
-  const [drop, setDrop] = useState<Drop | null>(null);
+  const [drop, setDrop] = useState<DropJson | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -48,7 +49,10 @@ export function DropPage({ id }: { id: string }) {
         {drop && drop.type === 'file' && (
           <div className="space-y-6">
             <div className="text-center space-y-2">
-              <p className="text-neutral-200 font-medium text-lg">{drop.fileName}</p>
+              <p className="text-neutral-200 font-medium text-lg">
+                {drop.metadata?.title ?? drop.fileName}
+              </p>
+              {drop.metadata?.title && <p className="text-neutral-500 text-sm">{drop.fileName}</p>}
               <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
                 {drop.size && <span>{formatSize(drop.size)}</span>}
                 <span>expires in {timeRemaining(drop.expiresAt)}</span>
@@ -67,14 +71,22 @@ export function DropPage({ id }: { id: string }) {
 
         {drop && drop.type === 'text' && (
           <div className="space-y-6">
-            <div className="text-center">
+            <div className="text-center space-y-2">
+              {drop.metadata?.title && (
+                <p className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</p>
+              )}
               <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
-                <span>Text snippet</span>
+                <span>{drop.metadata?.language ?? 'Text snippet'}</span>
                 <span>expires in {timeRemaining(drop.expiresAt)}</span>
               </div>
             </div>
 
-            <CodeEditor value={drop.content ?? ''} readOnly maxHeight="600px" />
+            <CodeEditor
+              value={drop.content ?? ''}
+              readOnly
+              maxHeight="600px"
+              {...(drop.metadata?.language != null ? { language: drop.metadata.language } : {})}
+            />
 
             <button
               type="button"
@@ -88,7 +100,10 @@ export function DropPage({ id }: { id: string }) {
 
         {drop && drop.type === 'link' && (
           <div className="space-y-6">
-            <div className="text-center">
+            <div className="text-center space-y-2">
+              {drop.metadata?.title && (
+                <p className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</p>
+              )}
               <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
                 <span>Shared link</span>
                 <span>expires in {timeRemaining(drop.expiresAt)}</span>

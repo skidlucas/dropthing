@@ -35,3 +35,8 @@ export class DropExpiredError extends Schema.TaggedErrorClass('DropExpiredError'
     expiredAt: Schema.Date,
   }
 ) {}
+
+export class AiError extends Schema.TaggedErrorClass('AiError')('AiError', {
+  message: Schema.String,
+  error: Schema.Defect,
+}) {}

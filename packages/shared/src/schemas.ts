@@ -6,6 +6,13 @@ export const UUID = Schema.String.pipe(Schema.check(Schema.isUUID()));
 export const DropType = Schema.Literals(['file', 'text', 'link']);
 export type DropType = typeof DropType.Type;
 
+export const DropMetadata = Schema.Struct({
+  language: Schema.optionalKey(Schema.String),
+  title: Schema.optionalKey(Schema.String),
+});
+
+export type DropMetadata = typeof DropMetadata.Type;
+
 export const Drop = Schema.Struct({
   id: UUID,
   type: DropType,
@@ -14,11 +21,18 @@ export const Drop = Schema.Struct({
   mimeType: Schema.NullOr(Schema.String),
   size: Schema.NullOr(Schema.Int),
   storageKey: Schema.NullOr(Schema.String),
+  metadata: Schema.NullOr(DropMetadata),
   createdAt: Schema.Date,
   expiresAt: Schema.Date,
 });
 
 export type Drop = typeof Drop.Type;
+
+/** Wire format: JSON.stringify converts Date → ISO string */
+export type DropJson = Omit<Drop, 'createdAt' | 'expiresAt'> & {
+  createdAt: string;
+  expiresAt: string;
+};
 
 export const UploadParams = Schema.Struct({
   type: DropType,

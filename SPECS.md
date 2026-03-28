@@ -15,7 +15,7 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 - **Unique share link**: each drop generates a unique URL
 - **Configurable TTL**: from 1 minute up to 7 days, set at upload time
 - **Automatic cleanup**: periodic job that purges expired drops (file + metadata)
-- **AI metadata** (planned): language detection + title generation via Groq
+- **AI metadata**: language detection + title generation via Groq (`llama-3.3-70b-versatile`)
 
 ## Future improvements
 
@@ -73,11 +73,13 @@ Storage is abstracted behind a `StorageService` (Effect Layer). Two implementati
 | **CodeMirror 6**              | 4.25.9  | Code editor (via `@uiw/react-codemirror`) with Tokyo Night theme                   |
 | **@codemirror/language-data** | 6.5.2   | Lazy-loaded language grammars for syntax highlighting                               |
 
-### AI (planned)
+### AI
 
-| Tool     | Role                                                            |
-| -------- | --------------------------------------------------------------- |
-| **Groq** | Fast LLM inference (LPU) — language detection + title generation |
+| Tool              | Version | Role                                                            |
+| ----------------- | ------- | --------------------------------------------------------------- |
+| **Groq**          |         | Fast LLM inference (LPU) — language detection + title generation |
+| **@ai-sdk/groq**  | latest  | Vercel AI SDK Groq provider                                     |
+| **ai**            | 6.x     | Vercel AI SDK — `generateText` for LLM calls                   |
 
 ### Linting & formatting
 
@@ -144,6 +146,8 @@ dropthing/
 │   │           │   ├── drop.route.ts       # POST /drops, GET /drops/:id, GET /drops/:id/file, DELETE /drops/:id
 │   │           │   ├── drop.service.ts     # Business logic (validation, storage, URL check)
 │   │           │   └── drop.repository.ts  # Data access (insert, findById, findExpired, deleteById)
+│   │           ├── ai/
+│   │           │   └── ai.service.ts          # AiService: Groq LLM for metadata (language, title)
 │   │           ├── storage/
 │   │           │   ├── storage.service.ts     # StorageService interface + StorageError
 │   │           │   ├── localStorage.layer.ts  # Local filesystem implementation
@@ -168,8 +172,8 @@ dropthing/
 │       ├── tsconfig.json       # Extends root, composite: true
 │       └── src/
 │           ├── index.ts        # Re-exports schemas + errors + constants
-│           ├── schemas.ts      # Drop, DropType, UploadParams, UUID
-│           ├── errors.ts       # InvalidInputError, FileTooLargeError, StorageError
+│           ├── schemas.ts      # Drop, DropJson, DropType, DropMetadata, UploadParams, UUID
+│           ├── errors.ts       # InvalidInputError, FileTooLargeError, StorageError, AiError
 │           └── constants.ts    # MAX_FILE_SIZE, MIN_TTL, MAX_TTL
 ```
 
@@ -185,14 +189,14 @@ DropService (métier)    → validation, storage delegation, expiresAt, URL chec
 DropRepository (data)   → CRUD via drizzle, Schema decoding
 StorageService (infra)  → save/get/delete files (LocalStorage or R2)
 DrizzleService (infra)  → drizzle instance with node-postgres driver
-AiService (infra)       → Groq API for metadata generation (planned)
+AiService (infra)       → Groq API for metadata generation (language, title)
 ```
 
 Layer composition in `index.ts`:
 ```
 DrizzleService → DropRepository ─┐
 StorageLayer ───────────────────┼→ DropService
-AiService (planned) ────────────┘
+AiService ──────────────────────┘
 ```
 
 `StorageLayer` is selected at startup based on `USE_R2` env var.
@@ -206,7 +210,7 @@ AiService (planned) ────────────┘
 
 ### DropService
 
-- `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type), compute expiresAt, delegate to repository. (Planned: enrich with AI metadata)
+- `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type), enrich with AI metadata (text/link), compute expiresAt, delegate to repository
 - `get(id)` — find drop, yield `DropNotFoundError` if missing, yield `DropExpiredError` if expired
 - `getFile(id)` — calls `get`, validates it's a file drop, returns `{ drop, content }` from StorageService
 - `delete(id)` — bypasses expiration (uses `repo.findById`), deletes storage file + DB record
@@ -221,12 +225,14 @@ AiService (planned) ────────────┘
 - Interface only (no `static layer`) — implementations are separate files
 - Two implementations: `LocalStorageLayer` (filesystem), `R2StorageLayer` (Cloudflare R2 via Bun S3Client)
 
-### AiService (planned)
+### AiService
 
-- Wraps Groq API for fast LLM inference
+- Wraps Groq API via `@ai-sdk/groq` + Vercel AI SDK `generateText`
+- Model: `llama-3.3-70b-versatile` (JSON prompt, no structured outputs)
 - `enrichDrop(content, type)` → `{ language?: string, title: string }`
-- Called during `DropService.create()` for all drop types
-- Graceful degradation: if Groq call fails, drop is created without metadata
+- Called during `DropService.create()` for text/link drops (not file — filename alone isn't useful context)
+- Content truncated to 2000 chars before sending to LLM
+- Graceful degradation: `Effect.catch` wraps the call — if Groq fails, drop is created with `metadata: null`
 
 ### CleanupService (planned)
 
@@ -254,9 +260,9 @@ Simple URL-based routing in `App.tsx` (no react-router):
 
 ### DropPage
 
-- **File drops**: file name, size, expiry time, download button (`max-w-md`)
-- **Text drops**: CodeMirror 6 read-only viewer, copy button (`max-w-2xl` for code readability). Language highlighting planned via AI-detected `metadata.language`
-- **Link drops**: clickable URL, open + copy buttons (`max-w-md`)
+- **File drops**: AI title (or filename as fallback), size, expiry time, download button (`max-w-md`)
+- **Text drops**: CodeMirror 6 read-only viewer with AI-detected syntax highlighting (`metadata.language`), AI title as heading, copy button (`max-w-2xl` for code readability)
+- **Link drops**: AI title as heading, clickable URL, open + copy buttons (`max-w-md`)
 - **Error states**: 404 / 410 / generic error with back-to-home link
 
 ### CodeEditor component
@@ -282,13 +288,13 @@ Shared wrapper around `@uiw/react-codemirror`:
 | `mimeType`  | VARCHAR nullable| MIME type for files                            |
 | `size`      | INTEGER nullable| File size in bytes                             |
 | `storageKey`| VARCHAR nullable| R2/local path (`YYYY/MM/DD/uuid.ext`)          |
-| `metadata`  | JSONB nullable  | (planned) AI-generated: `{ language?, title }` |
+| `metadata`  | JSONB nullable  | AI-generated: `{ language?, title }` |
 | `createdAt` | TIMESTAMP       | `now()`                                        |
 | `expiresAt` | TIMESTAMP       | `createdAt + TTL`                              |
 
-### metadata JSONB (planned)
+### metadata JSONB
 
-Polymorphic per drop type, no fixed schema enforced at DB level (validated by Effect Schema in app).
+Polymorphic per drop type, no fixed schema enforced at DB level (validated by Effect `DropMetadata` Schema in app).
 
 ```jsonb
 -- text drop with code
@@ -365,7 +371,7 @@ Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect
 2. Extract `file` or `content` from FormData (route)
 3. DropService validates (file size / URL format)
 4. Save file via StorageService if file type
-5. (Planned) Call AiService to generate metadata (language, title)
+5. Call AiService to enrich with metadata (language, title) — text/link only, graceful degradation
 6. Insert metadata in PG via DropRepository
 7. Return drop as JSON (201)
 

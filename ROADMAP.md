@@ -96,19 +96,22 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 ---
 
-## Phase 6 — AI-powered metadata (Groq)
+## Phase 6 — AI-powered metadata (Groq) ✓
 
 **Goal**: Enrich drops with AI-generated metadata at creation time.
 
-**New Effect concepts**: external API integration via `Effect.tryPromise`, JSONB metadata column, service composition with optional/fallback behavior
+**New Effect concepts**: external API integration via `Effect.tryPromise`, JSONB metadata column, service composition with optional/fallback behavior, `Effect.catch` for graceful degradation
 
-- [ ] Add `metadata` JSONB column to `drops` table (nullable) — polymorphic per drop type
-- [ ] `AiService` Effect service wrapping Groq API (fast LLM inference)
-- [ ] Detect programming language for text drops (replaces heuristic-based detection)
-- [ ] Auto-generate short title for all drop types
-- [ ] Called in `DropService.create()` — single Groq call returns `{ language, title }`
-- [ ] Frontend: display `metadata.language` for syntax highlighting, `metadata.title` instead of generic label
-- [ ] Graceful degradation: if Groq fails, drop is created without metadata (no blocking)
+- [x] Added `metadata` JSONB column to `drops` table (nullable) — polymorphic per drop type
+- [x] `AiService` Effect service wrapping Groq API via `@ai-sdk/groq` (Vercel AI SDK)
+- [x] Model: `llama-3.3-70b-versatile` with JSON prompt (no structured outputs — model doesn't support `json_schema`)
+- [x] Detect programming language for text drops (replaces heuristic-based detection)
+- [x] Auto-generate descriptive title for text/link drops (file drops excluded — filename alone isn't useful context)
+- [x] Called in `DropService.create()` — single Groq call returns `{ language?, title }`
+- [x] Frontend: `metadata.language` drives CodeMirror syntax highlighting, `metadata.title` shown as heading on DropPage + success screen on UploadPage
+- [x] Graceful degradation: `Effect.catch(() => Effect.succeed(null))` — if Groq fails, drop is created without metadata
+- [x] `DropMetadata` schema with `Schema.optionalKey` for optional fields
+- [x] `DropJson` wire type: `Omit<Drop, dates> & { dates: string }` for JSON serialization
 
 ---
 

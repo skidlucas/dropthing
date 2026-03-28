@@ -12,6 +12,7 @@ import {
 import { DropRepository } from './drop.repository.js';
 import type { DatabaseError } from '../../db/db.service.js';
 import { StorageService } from '../storage/storage.service.js';
+import { AiService } from '../ai/ai.service.js';
 
 function generateStorageKey(fileName: string): string {
   const date = new Date();
@@ -68,6 +69,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
     Effect.gen(function* () {
       const repo = yield* DropRepository;
       const storage = yield* StorageService;
+      const ai = yield* AiService;
 
       const create = Effect.fn('DropService.create')(function* (input: CreateDropInput) {
         const expiresAt = new Date(Date.now() + input.expiresIn * 1000);
@@ -93,6 +95,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
             mimeType: file.type || 'application/octet-stream',
             size: file.size,
             storageKey,
+            metadata: null,
             expiresAt,
           });
         }
@@ -103,9 +106,19 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
           );
         }
 
+        const metadata = yield* ai.enrichDrop(input.content, input.type).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              yield* Effect.logWarning('AI enrichment failed', error);
+              return null;
+            })
+          )
+        );
+
         return yield* repo.insert({
           type: input.type,
           content: input.content,
+          metadata,
           expiresAt,
         });
       });

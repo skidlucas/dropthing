@@ -1,4 +1,13 @@
-import { integer, pgTable, text, varchar, timestamp, index, uuid } from 'drizzle-orm/pg-core';
+import {
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  varchar,
+  timestamp,
+  index,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const dropsTable = pgTable(
@@ -13,6 +22,7 @@ export const dropsTable = pgTable(
     mimeType: varchar(),
     size: integer(),
     storageKey: varchar(),
+    metadata: jsonb().$type<{ language?: string; title?: string }>(),
     createdAt: timestamp().notNull().defaultNow(),
     expiresAt: timestamp()
       .notNull()

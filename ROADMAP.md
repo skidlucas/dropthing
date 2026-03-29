@@ -14,7 +14,7 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 - [x] Drizzle Kit config + migrations
 - [x] DrizzleService layer via `ServiceMap.Service` (`db/db.service.ts`)
 - [x] DropRepository: insert, findById, findExpired, deleteById (`modules/drop/drop.repository.ts`)
-- [x] DropService: create, get, delete, listExpired (`modules/drop/drop.service.ts`)
+- [x] DropService: create, get, delete (`modules/drop/drop.service.ts`)
 - [x] Layered architecture: Route → DropService (business logic) → DropRepository (data access) → DrizzleService
 - [x] Centralized layer composition in `index.ts` (DrizzleService → DropRepository → DropService)
 - [x] ManagedRuntime for sharing DB pool across Hono handlers
@@ -115,15 +115,20 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 ---
 
-## Phase 7 — Automatic cleanup
+## Phase 7 — Automatic cleanup ✓
 
 **Goal**: Periodic background job, concurrent operations.
 
-**New Effect concepts**: `Schedule`, `Effect.all` with concurrency
+**New Effect concepts**: `Schedule.spaced`, `Effect.repeat`, `Effect.all` with `concurrency`, `Effect.catch` for fault-tolerant scheduling, `Layer.mergeAll`, `runtime.runFork`
 
-- [ ] CleanupService: list expired → delete from storage + metadata
-- [ ] Schedule the cleanup job (`Schedule.spaced` or `Schedule.cron`)
-- [ ] Run as part of the API process (no separate worker needed)
+- [x] `CleanupService`: list expired drops with storage keys → delete files from storage → clear `storageKey` in DB (soft delete — row kept for 410 UX)
+- [x] `findExpiredWithStorageKey()` repo method — only targets drops that still have files to clean
+- [x] `clearStorageKey(id)` repo method — sets `storageKey = null` after file deletion
+- [x] `Effect.all` with `{ concurrency: 5, discard: true }` for parallel file cleanup
+- [x] Scheduled via `Effect.repeat(Schedule.spaced("5 minutes"))` with `Effect.catch` per iteration (errors don't break the schedule)
+- [x] Forked as background fiber via `runtime.runFork` in `index.ts`
+- [x] Job definition isolated in `cleanup.job.ts`, separate from service logic
+- [x] `Layer.mergeAll(DropService.layer, CleanupService.layer)` for horizontal layer composition
 
 ---
 

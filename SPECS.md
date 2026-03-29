@@ -135,7 +135,7 @@ dropthing/
 │   │   ├── drizzle.config.ts   # Drizzle Kit config
 │   │   ├── tsconfig.json       # Extends root, composite: true
 │   │   └── src/
-│   │       ├── index.ts        # Hono app entrypoint, centralized layer composition
+│   │       ├── index.ts        # Hono app entrypoint, centralized layer composition + job startup
 │   │       ├── common/
 │   │       │   └── helpers.ts  # Shared route helpers (withBasicErrorHandling)
 │   │       ├── db/
@@ -145,7 +145,10 @@ dropthing/
 │   │           ├── drop/
 │   │           │   ├── drop.route.ts       # POST /drops, GET /drops/:id, GET /drops/:id/file, DELETE /drops/:id
 │   │           │   ├── drop.service.ts     # Business logic (validation, storage, URL check)
-│   │           │   └── drop.repository.ts  # Data access (insert, findById, findExpired, deleteById)
+│   │           │   └── drop.repository.ts  # Data access (insert, findById, findExpiredWithStorageKey, deleteById, clearStorageKey)
+│   │           ├── cleanup/
+│   │           │   ├── cleanup.service.ts   # CleanupService: purge expired file storage
+│   │           │   └── cleanup.job.ts       # Scheduled job definition (repeat + schedule)
 │   │           ├── ai/
 │   │           │   └── ai.service.ts          # AiService: Groq LLM for metadata (language, title)
 │   │           ├── storage/
@@ -205,8 +208,9 @@ AiService ──────────────────────┘
 
 - `insert(input)` — insert drop metadata into PG, return decoded Drop
 - `findById(id)` — retrieve a drop by ID, decoded via `Schema.decodeUnknownEffect(Drop)`
-- `findExpired()` — list all expired drops
+- `findExpiredWithStorageKey()` — list expired drops that still have files in storage
 - `deleteById(id)` — delete a drop from PG
+- `clearStorageKey(id)` — set `storageKey = null` (marks file as cleaned)
 
 ### DropService
 
@@ -214,7 +218,6 @@ AiService ──────────────────────┘
 - `get(id)` — find drop, yield `DropNotFoundError` if missing, yield `DropExpiredError` if expired
 - `getFile(id)` — calls `get`, validates it's a file drop, returns `{ drop, content }` from StorageService
 - `delete(id)` — bypasses expiration (uses `repo.findById`), deletes storage file + DB record
-- `listExpired()` — delegate to repository
 - `CreateDropInput`: discriminated union (`{ type: 'file'; file: File } | { type: 'text'; content: string } | { type: 'link'; content: string }`)
 
 ### StorageService
@@ -234,10 +237,13 @@ AiService ──────────────────────┘
 - Content truncated to 2000 chars before sending to LLM
 - Graceful degradation: `Effect.catch` wraps the call — if Groq fails, drop is created with `metadata: null`
 
-### CleanupService (planned)
+### CleanupService
 
-- Purges expired drops (storage file + PG metadata)
-- Runs periodically via Effect `Schedule`
+- Soft-delete: purges storage files for expired drops but keeps DB rows (enables 410 "expired" UX)
+- `runOnce()` — finds expired drops with `storageKey`, deletes files via `StorageService`, clears `storageKey` in DB
+- `Effect.all` with `{ concurrency: 5, discard: true }` for parallel file deletion
+- Scheduled via `cleanup.job.ts`: `Effect.repeat(Schedule.spaced("5 minutes"))` with `Effect.catch` per iteration
+- Forked as background fiber via `runtime.runFork` at startup
 
 ---
 
@@ -384,12 +390,14 @@ Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect
 5. Fetch content from StorageService
 6. Return `Response` with `Content-Type`, `Content-Disposition: attachment`, `Content-Length`
 
-### Cleanup (planned)
+### Cleanup
 
-1. Periodic job (`Schedule.spaced` or `Schedule.cron`)
-2. List expired drops via `DropService.listExpired()`
-3. Delete files from storage
-4. Delete metadata from PG
+1. Background fiber started at boot via `runtime.runFork(cleanupJob)`
+2. Every 5 minutes: `CleanupService.runOnce()`
+3. List expired drops with `storageKey` via `DropRepository.findExpiredWithStorageKey()`
+4. For each (concurrency 5): delete file from storage → set `storageKey = null` in DB
+5. DB rows are kept (soft delete) — enables "Drop expired" (410) response on the frontend
+6. Errors in individual iterations are caught — schedule continues regardless
 
 ---
 

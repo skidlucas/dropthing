@@ -55,10 +55,6 @@ type DropServiceShape = {
   readonly delete: (
     id: string
   ) => Effect.Effect<void, DropNotFoundError | StorageError | DatabaseError | Schema.SchemaError>;
-  readonly listExpired: () => Effect.Effect<
-    ReadonlyArray<Drop>,
-    DatabaseError | Schema.SchemaError
-  >;
 };
 
 export class DropService extends ServiceMap.Service<DropService, DropServiceShape>()(
@@ -158,11 +154,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
         yield* repo.deleteById(id);
       });
 
-      const listExpired = Effect.fn('DropService.listExpired')(function* () {
-        return yield* repo.findExpired();
-      });
-
-      return { create, get, getFile, delete: del, listExpired };
+      return { create, get, getFile, delete: del };
     })
   );
 }

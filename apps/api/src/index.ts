@@ -7,23 +7,28 @@ import { DrizzleService } from './db/db.service.js';
 import { LocalStorageLayer } from './modules/storage/localStorage.layer.js';
 import { R2StorageLayer } from './modules/storage/r2Storage.layer.js';
 import { AiService } from './modules/ai/ai.service.js';
+import { CleanupService } from './modules/cleanup/cleanup.service.js';
 import health from './modules/health/health.route.js';
 import dropRoutes from './modules/drop/drop.route.js';
+import { cleanupJob } from './modules/cleanup/cleanup.job.js';
 
 const useR2 = process.env.USE_R2 !== 'false';
 const StorageLayer = useR2 ? R2StorageLayer : LocalStorageLayer;
 
 // Compose all layers at the entry point:
 // DrizzleService → DropRepository ─┐
-// StorageLayer ────────────────────┼→ DropService
+// StorageLayer ────────────────────┼→ DropService + CleanupService
 // AiService ───────────────────────┘
-const AppLayer = DropService.layer.pipe(
+const AppLayer = Layer.mergeAll(DropService.layer, CleanupService.layer).pipe(
   Layer.provide(DropRepository.layer),
   Layer.provide(DrizzleService.layer),
   Layer.provide(StorageLayer),
   Layer.provide(AiService.layer)
 );
 const runtime = ManagedRuntime.make(AppLayer);
+
+// Start background jobs
+runtime.runFork(cleanupJob);
 
 const app = new Hono();
 

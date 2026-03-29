@@ -1,5 +1,5 @@
 import { Effect, Layer, Schema, ServiceMap } from 'effect';
-import { eq, lt } from 'drizzle-orm';
+import { and, eq, isNotNull, lt } from 'drizzle-orm';
 import type { DropType, DropMetadata } from '@dropthing/shared';
 import { Drop } from '@dropthing/shared';
 import { dropsTable } from '../../db/schema.js';
@@ -24,11 +24,12 @@ type DropRepositoryShape = {
     input: InsertDropInput
   ) => Effect.Effect<Drop, DatabaseError | Schema.SchemaError>;
   readonly findById: (id: string) => Effect.Effect<Drop | null, DatabaseError | Schema.SchemaError>;
-  readonly findExpired: () => Effect.Effect<
+  readonly findExpiredWithStorageKey: () => Effect.Effect<
     ReadonlyArray<Drop>,
     DatabaseError | Schema.SchemaError
   >;
   readonly deleteById: (id: string) => Effect.Effect<void, DatabaseError>;
+  readonly clearStorageKey: (id: string) => Effect.Effect<void, DatabaseError>;
 };
 
 export class DropRepository extends ServiceMap.Service<DropRepository, DropRepositoryShape>()(
@@ -63,18 +64,27 @@ export class DropRepository extends ServiceMap.Service<DropRepository, DropRepos
         return rows[0] ? yield* decodeDrop(rows[0]) : null;
       });
 
-      const findExpired = Effect.fn('DropRepository.findExpired')(function* () {
-        const rows = yield* query(
-          db.select().from(dropsTable).where(lt(dropsTable.expiresAt, new Date()))
-        );
-        return yield* decodeDrops(rows);
-      });
+      const findExpiredWithStorageKey = Effect.fn('DropRepository.findExpiredWithStorageKey')(
+        function* () {
+          const rows = yield* query(
+            db
+              .select()
+              .from(dropsTable)
+              .where(and(lt(dropsTable.expiresAt, new Date()), isNotNull(dropsTable.storageKey)))
+          );
+          return yield* decodeDrops(rows);
+        }
+      );
 
       const deleteById = Effect.fn('DropRepository.deleteById')(function* (id: string) {
         yield* query(db.delete(dropsTable).where(eq(dropsTable.id, id)));
       });
 
-      return { insert, findById, findExpired, deleteById };
+      const clearStorageKey = Effect.fn('DropRepository.clearStorageKey')(function* (id: string) {
+        yield* query(db.update(dropsTable).set({ storageKey: null }).where(eq(dropsTable.id, id)));
+      });
+
+      return { insert, findById, findExpiredWithStorageKey, deleteById, clearStorageKey };
     })
   );
 }

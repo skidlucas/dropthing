@@ -26,13 +26,14 @@ export default function dropRoutes(runtime: AppRuntime) {
       Effect.gen(function* () {
         const params = yield* parseParams(formData);
         const dropService = yield* DropService;
+        const encrypted = formData.get('encrypted') === 'true';
 
         let input: CreateDropInput;
 
         if (params.type === 'file') {
           const file = formData.get('file') as File | null;
           if (!file) return yield* new InvalidInputError({ message: 'Missing file' });
-          input = { type: 'file', file, expiresIn: params.expiresIn };
+          input = { type: 'file', file, expiresIn: params.expiresIn, encrypted };
         } else {
           const content = formData.get('content') as string | null;
           if (!content) {
@@ -40,7 +41,12 @@ export default function dropRoutes(runtime: AppRuntime) {
               message: `Missing content for ${params.type} drop`,
             });
           }
-          input = { type: params.type, content, expiresIn: params.expiresIn };
+          input = {
+            type: params.type,
+            content,
+            expiresIn: params.expiresIn,
+            ...(params.type !== 'link' ? { encrypted } : {}),
+          };
         }
 
         const drop = yield* dropService.create(input);

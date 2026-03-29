@@ -22,6 +22,7 @@ export const Drop = Schema.Struct({
   size: Schema.NullOr(Schema.Int),
   storageKey: Schema.NullOr(Schema.String),
   metadata: Schema.NullOr(DropMetadata),
+  encrypted: Schema.Boolean,
   createdAt: Schema.Date,
   expiresAt: Schema.Date,
 });

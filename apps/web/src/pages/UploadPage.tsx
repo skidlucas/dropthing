@@ -1,5 +1,6 @@
 import { useState, useRef, type DragEvent } from 'react';
 import { createDrop, TTL_OPTIONS, formatSize, isUrl } from '@/lib/api';
+import { generateKey, exportKey, encryptText, encrypt, arrayBufferToBase64 } from '@/lib/crypto';
 import { CodeEditor, languages } from '@/components/code-editor';
 import type { DropJson } from '@dropthing/shared';
 
@@ -16,9 +17,13 @@ export function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DropJson | null>(null);
   const [copied, setCopied] = useState(false);
+  const [encrypted, setEncrypted] = useState(false);
+  const [keyFragment, setKeyFragment] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const shareUrl = result ? `${window.location.origin}/drops/${result.id}` : '';
+  const shareUrl = result
+    ? `${window.location.origin}/drops/${result.id}${keyFragment ? `#${keyFragment}` : ''}`
+    : '';
   const contentIsUrl = mode === 'text' && isUrl(content);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -28,12 +33,34 @@ export function UploadPage() {
 
     try {
       const type = contentIsUrl ? 'link' : mode;
+      const shouldEncrypt = encrypted && !contentIsUrl;
+
+      let uploadFile = mode === 'file' ? (file ?? undefined) : undefined;
+      let uploadContent = mode === 'text' ? content : undefined;
+      let fragment = '';
+
+      if (shouldEncrypt) {
+        const key = await generateKey();
+        fragment = await exportKey(key);
+
+        if (mode === 'file' && file) {
+          const plaintext = await file.arrayBuffer();
+          const ciphertext = await encrypt(key, plaintext);
+          uploadFile = new File([ciphertext], file.name, { type: file.type });
+        } else if (mode === 'text') {
+          const ciphertext = await encryptText(key, content);
+          uploadContent = arrayBufferToBase64(ciphertext);
+        }
+      }
+
       const drop = await createDrop({
         type,
         expiresIn: ttl,
-        file: mode === 'file' ? (file ?? undefined) : undefined,
-        content: mode === 'text' ? content : undefined,
+        file: uploadFile,
+        content: uploadContent,
+        encrypted: shouldEncrypt,
       });
+      setKeyFragment(fragment);
       setResult(drop);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
@@ -63,6 +90,8 @@ export function UploadPage() {
     setFile(null);
     setContent('');
     setLanguage('');
+    setEncrypted(false);
+    setKeyFragment('');
     setError(null);
   }
 
@@ -82,6 +111,11 @@ export function UploadPage() {
           </div>
 
           <div className="space-y-3">
+            {keyFragment && (
+              <p className="text-amber-400/80 text-xs text-center">
+                Encrypted — the decryption key is embedded in the link
+              </p>
+            )}
             <div className="bg-neutral-800 rounded-lg p-3 font-mono text-sm text-neutral-300 break-all">
               {shareUrl}
             </div>
@@ -210,6 +244,28 @@ export function UploadPage() {
             ))}
           </select>
         </div>
+
+        {/* Encryption toggle */}
+        {!contentIsUrl && (
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={encrypted}
+              onChange={(e) => setEncrypted(e.target.checked)}
+            />
+            <div
+              className={`w-9 h-5 rounded-full relative transition-colors ${encrypted ? 'bg-green-600' : 'bg-neutral-700'}`}
+            >
+              <div
+                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${encrypted ? 'translate-x-4' : ''}`}
+              />
+            </div>
+            <span className="text-neutral-400 text-sm group-hover:text-neutral-300 transition-colors">
+              End-to-end encryption
+            </span>
+          </label>
+        )}
 
         {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 

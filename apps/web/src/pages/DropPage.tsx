@@ -1,18 +1,65 @@
 import { useEffect, useState } from 'react';
 import type { DropJson } from '@dropthing/shared';
 import { getDrop, getFileUrl, formatSize, timeRemaining } from '@/lib/api';
+import { importKey, decrypt, decryptText, base64ToArrayBuffer } from '@/lib/crypto';
 import { CodeEditor } from '@/components/code-editor';
 
 export function DropPage({ id }: { id: string }) {
   const [drop, setDrop] = useState<DropJson | null>(null);
+  const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [decrypting, setDecrypting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const keyString = window.location.hash.slice(1);
+
   useEffect(() => {
     getDrop(id)
-      .then(setDrop)
+      .then(async (d) => {
+        setDrop(d);
+        if (d.encrypted && d.type === 'text' && d.content) {
+          if (!keyString) {
+            setError('This drop is encrypted. The decryption key is missing from the URL.');
+            return;
+          }
+          setDecrypting(true);
+          try {
+            const key = await importKey(keyString);
+            const ciphertext = base64ToArrayBuffer(d.content);
+            const plaintext = await decryptText(key, ciphertext);
+            setDecryptedContent(plaintext);
+          } catch {
+            setError('Decryption failed — invalid key');
+          } finally {
+            setDecrypting(false);
+          }
+        }
+      })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load'));
-  }, [id]);
+  }, [id, keyString]);
+
+  async function handleEncryptedDownload() {
+    if (!drop || !keyString) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(getFileUrl(id));
+      const ciphertext = await res.arrayBuffer();
+      const key = await importKey(keyString);
+      const plaintext = await decrypt(key, ciphertext);
+      const blob = new Blob([plaintext], { type: drop.mimeType ?? 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = drop.fileName ?? 'download';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Failed to decrypt file');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   function handleCopy(text: string) {
     navigator.clipboard.writeText(text);
@@ -55,17 +102,33 @@ export function DropPage({ id }: { id: string }) {
               {drop.metadata?.title && <p className="text-neutral-500 text-sm">{drop.fileName}</p>}
               <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
                 {drop.size && <span>{formatSize(drop.size)}</span>}
+                {drop.encrypted && <span className="text-amber-400/80">Encrypted</span>}
                 <span>expires in {timeRemaining(drop.expiresAt)}</span>
               </div>
             </div>
 
-            <a
-              href={getFileUrl(id)}
-              download
-              className="block w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors text-center"
-            >
-              Download
-            </a>
+            {drop.encrypted && !keyString ? (
+              <p className="text-red-400 text-sm text-center">
+                Decryption key is missing from the URL
+              </p>
+            ) : drop.encrypted ? (
+              <button
+                type="button"
+                onClick={handleEncryptedDownload}
+                disabled={downloading}
+                className="w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors disabled:opacity-40"
+              >
+                {downloading ? 'Decrypting...' : 'Decrypt & Download'}
+              </button>
+            ) : (
+              <a
+                href={getFileUrl(id)}
+                download
+                className="block w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors text-center"
+              >
+                Download
+              </a>
+            )}
           </div>
         )}
 
@@ -76,25 +139,38 @@ export function DropPage({ id }: { id: string }) {
                 <p className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</p>
               )}
               <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
+                {drop.encrypted && <span className="text-amber-400/80">Encrypted</span>}
                 <span>{drop.metadata?.language ?? 'Text snippet'}</span>
                 <span>expires in {timeRemaining(drop.expiresAt)}</span>
               </div>
             </div>
 
-            <CodeEditor
-              value={drop.content ?? ''}
-              readOnly
-              maxHeight="600px"
-              {...(drop.metadata?.language != null ? { language: drop.metadata.language } : {})}
-            />
+            {decrypting ? (
+              <p className="text-center text-neutral-500">Decrypting...</p>
+            ) : drop.encrypted && !keyString ? (
+              <p className="text-red-400 text-sm text-center">
+                Decryption key is missing from the URL
+              </p>
+            ) : (
+              <>
+                <CodeEditor
+                  value={drop.encrypted ? (decryptedContent ?? '') : (drop.content ?? '')}
+                  readOnly
+                  maxHeight="600px"
+                  {...(drop.metadata?.language != null ? { language: drop.metadata.language } : {})}
+                />
 
-            <button
-              type="button"
-              onClick={() => handleCopy(drop.content ?? '')}
-              className="w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors"
-            >
-              {copied ? 'Copied!' : 'Copy content'}
-            </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCopy(drop.encrypted ? (decryptedContent ?? '') : (drop.content ?? ''))
+                  }
+                  className="w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors"
+                >
+                  {copied ? 'Copied!' : 'Copy content'}
+                </button>
+              </>
+            )}
           </div>
         )}
 

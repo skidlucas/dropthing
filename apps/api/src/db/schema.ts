@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   jsonb,
   pgTable,
@@ -23,6 +24,7 @@ export const dropsTable = pgTable(
     size: integer(),
     storageKey: varchar(),
     metadata: jsonb().$type<{ language?: string; title?: string }>(),
+    encrypted: boolean().notNull().default(false),
     createdAt: timestamp().notNull().defaultNow(),
     expiresAt: timestamp()
       .notNull()

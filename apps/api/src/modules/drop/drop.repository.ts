@@ -17,6 +17,7 @@ export interface InsertDropInput {
   readonly size?: number | null;
   readonly storageKey?: string | null;
   readonly metadata?: DropMetadata | null;
+  readonly encrypted?: boolean;
 }
 
 type DropRepositoryShape = {
@@ -50,6 +51,7 @@ export class DropRepository extends ServiceMap.Service<DropRepository, DropRepos
           size: input.size ?? null,
           storageKey: input.storageKey ?? null,
           metadata: input.metadata ?? null,
+          encrypted: input.encrypted ?? false,
           createdAt: new Date(),
           expiresAt: input.expiresAt,
         };

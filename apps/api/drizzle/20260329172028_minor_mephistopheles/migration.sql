@@ -1,0 +1,1 @@
+ALTER TABLE "drops" ADD COLUMN "encrypted" boolean DEFAULT false NOT NULL;

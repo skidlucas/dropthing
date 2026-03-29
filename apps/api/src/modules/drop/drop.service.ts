@@ -24,8 +24,18 @@ function generateStorageKey(fileName: string): string {
 }
 
 export type CreateDropInput =
-  | { readonly type: 'file'; readonly file: File; readonly expiresIn: number }
-  | { readonly type: 'text'; readonly content: string; readonly expiresIn: number }
+  | {
+      readonly type: 'file';
+      readonly file: File;
+      readonly expiresIn: number;
+      readonly encrypted?: boolean;
+    }
+  | {
+      readonly type: 'text';
+      readonly content: string;
+      readonly expiresIn: number;
+      readonly encrypted?: boolean;
+    }
   | { readonly type: 'link'; readonly content: string; readonly expiresIn: number };
 
 type DropServiceShape = {
@@ -92,6 +102,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
             size: file.size,
             storageKey,
             metadata: null,
+            encrypted: input.encrypted ?? false,
             expiresAt,
           });
         }
@@ -102,19 +113,24 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
           );
         }
 
-        const metadata = yield* ai.enrichDrop(input.content, input.type).pipe(
-          Effect.catch((error) =>
-            Effect.gen(function* () {
-              yield* Effect.logWarning('AI enrichment failed', error);
-              return null;
-            })
-          )
-        );
+        const encrypted = input.type !== 'link' && (input.encrypted ?? false);
+
+        const metadata = encrypted
+          ? null
+          : yield* ai.enrichDrop(input.content, input.type).pipe(
+              Effect.catch((error) =>
+                Effect.gen(function* () {
+                  yield* Effect.logWarning('AI enrichment failed', error);
+                  return null;
+                })
+              )
+            );
 
         return yield* repo.insert({
           type: input.type,
           content: input.content,
           metadata,
+          encrypted,
           expiresAt,
         });
       });

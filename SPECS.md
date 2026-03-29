@@ -16,6 +16,7 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 - **Configurable TTL**: from 1 minute up to 7 days, set at upload time
 - **Automatic cleanup**: periodic job that purges expired drops (file + metadata)
 - **AI metadata**: language detection + title generation via Groq (`llama-3.3-70b-versatile`)
+- **End-to-end encryption**: opt-in AES-256-GCM client-side encryption for text and file drops; decryption key in URL fragment (never sent to server)
 
 ## Future improvements
 
@@ -164,7 +165,8 @@ dropthing/
 │       └── src/
 │           ├── App.tsx         # URL-based routing (/ → UploadPage, /drops/:id → DropPage)
 │           ├── lib/
-│           │   └── api.ts      # API client (createDrop, getDrop, getFileUrl, isUrl, helpers)
+│           │   ├── api.ts      # API client (createDrop, getDrop, getFileUrl, isUrl, helpers)
+│           │   └── crypto.ts   # E2EE: AES-256-GCM encrypt/decrypt, key import/export, base64 helpers
 │           ├── components/
 │           │   └── code-editor.tsx  # CodeMirror 6 wrapper (Tokyo Night, lazy language loading)
 │           └── pages/
@@ -262,14 +264,16 @@ Simple URL-based routing in `App.tsx` (no react-router):
 - **Text tab**: CodeMirror 6 editor (Tokyo Night theme) + language selector dropdown
 - **Auto-detect URL**: if text content is a single valid HTTP(S) URL → sent as `type: 'link'` transparently, with "Link detected" indicator
 - **TTL selector**: 5 min / 1 hour / 1 day / 7 days
-- **After upload**: shows share link + copy-to-clipboard + "Drop another" reset
+- **Encryption toggle**: opt-in E2EE (hidden when URL detected — links are not encrypted)
+- **After upload**: shows share link (with key fragment if encrypted) + copy-to-clipboard + "Drop another" reset
 
 ### DropPage
 
 - **File drops**: AI title (or filename as fallback), size, expiry time, download button (`max-w-md`)
 - **Text drops**: CodeMirror 6 read-only viewer with AI-detected syntax highlighting (`metadata.language`), AI title as heading, copy button (`max-w-2xl` for code readability)
 - **Link drops**: AI title as heading, clickable URL, open + copy buttons (`max-w-md`)
-- **Error states**: 404 / 410 / generic error with back-to-home link
+- **Encrypted drops**: decryption key extracted from URL fragment (`#`), content decrypted client-side. Missing key shows error. File download triggers fetch → decrypt → Blob download.
+- **Error states**: 404 / 410 / generic error / missing decryption key, with back-to-home link
 
 ### CodeEditor component
 
@@ -295,6 +299,7 @@ Shared wrapper around `@uiw/react-codemirror`:
 | `size`      | INTEGER nullable| File size in bytes                             |
 | `storageKey`| VARCHAR nullable| R2/local path (`YYYY/MM/DD/uuid.ext`)          |
 | `metadata`  | JSONB nullable  | AI-generated: `{ language?, title }` |
+| `encrypted` | BOOLEAN         | `false` default, true = client-side E2EE       |
 | `createdAt` | TIMESTAMP       | `now()`                                        |
 | `expiresAt` | TIMESTAMP       | `createdAt + TTL`                              |
 
@@ -380,6 +385,23 @@ Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect
 5. Call AiService to enrich with metadata (language, title) — text/link only, graceful degradation
 6. Insert metadata in PG via DropRepository
 7. Return drop as JSON (201)
+
+### Encrypted upload flow
+
+1. User enables E2EE toggle (text or file — not links)
+2. `generateKey()` → AES-256-GCM `CryptoKey`
+3. **Text**: `encryptText(key, content)` → base64-encoded ciphertext sent as `content`
+4. **File**: `encrypt(key, file.arrayBuffer())` → new `File` from ciphertext bytes
+5. `exportKey(key)` → base64url string appended to share URL as fragment (`#key`)
+6. Server stores ciphertext + `encrypted: true`; AI enrichment is skipped
+7. Key never leaves the browser (URL fragment is not sent in HTTP requests)
+
+### Encrypted view flow
+
+1. Extract key from `window.location.hash`
+2. **Text**: `base64ToArrayBuffer(content)` → `decryptText(key, ciphertext)` → display plaintext
+3. **File**: `fetch(fileUrl)` → `decrypt(key, ciphertext)` → `Blob` → browser download
+4. Missing key → error message ("Decryption key is missing from the URL")
 
 ### Download (GET /drops/:id/file)
 

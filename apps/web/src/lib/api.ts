@@ -7,10 +7,12 @@ export async function createDrop(data: {
   expiresIn: number;
   file?: File | undefined;
   content?: string | undefined;
+  encrypted?: boolean;
 }): Promise<DropJson> {
   const formData = new FormData();
   formData.append('type', data.type);
   formData.append('expiresIn', String(data.expiresIn));
+  if (data.encrypted) formData.append('encrypted', 'true');
 
   if (data.type === 'file' && data.file) {
     formData.append('file', data.file);

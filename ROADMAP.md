@@ -132,11 +132,29 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 ---
 
-## Phase 8 — Polish & nice-to-haves
+## Phase 8 — End-to-end encryption ✓
+
+**Goal**: Opt-in client-side encryption so the server never sees plaintext.
+
+**New concepts**: Web Crypto API (`AES-256-GCM`), URL fragment (`#`) for key transport, `ArrayBuffer` ↔ base64 encoding, Blob URLs for decrypted previews
+
+- [x] `crypto.ts` client-side module: `generateKey`, `encrypt`/`decrypt` (AES-256-GCM), `exportKey`/`importKey` (base64url), `encryptText`/`decryptText`
+- [x] IV (12 bytes) prepended to ciphertext — single `ArrayBuffer` for storage
+- [x] `encrypted` boolean column in DB + `Drop` schema + `CreateDropInput`
+- [x] Server-side: skip AI enrichment when `encrypted` flag is set
+- [x] Upload flow: toggle → generate key → encrypt content/file client-side → upload ciphertext → key in URL fragment (`#`)
+- [x] View flow (text): extract key from `window.location.hash` → base64 → ArrayBuffer → decrypt → display
+- [x] View flow (file): fetch ciphertext → decrypt in browser → Blob download
+- [x] Missing key UX: clear error message when fragment is absent
+- [x] Links excluded from encryption (public URLs, no value in encrypting)
+
+---
+
+## Phase 9 — Polish & nice-to-haves
 
 Pick from:
 
-- [ ] File preview (images, videos, text)
+- [ ] File preview (images, videos, audio) — works with E2EE via decrypted Blob URLs
 - [ ] QR code generation for share links
 - [ ] Password-protected shares
 - [ ] Download count limit

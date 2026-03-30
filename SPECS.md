@@ -16,7 +16,7 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 - **Configurable TTL**: from 1 minute up to 7 days, set at upload time
 - **Automatic cleanup**: periodic job that purges expired drops (file + metadata)
 - **AI metadata**: language detection + title generation via Groq (`llama-3.3-70b-versatile`)
-- **End-to-end encryption**: opt-in AES-256-GCM client-side encryption for text and file drops; decryption key in URL fragment (never sent to server)
+- **End-to-end encryption**: opt-in AES-256-GCM client-side encryption for any drop type; decryption key in URL fragment (never sent to server)
 
 ## Future improvements
 
@@ -93,6 +93,13 @@ Storage is abstracted behind a `StorageService` (Effect Layer). Two implementati
 
 Pre-commit hook runs `oxlint --fix` + `oxfmt --write` on staged files via lint-staged.
 
+### Testing
+
+| Tool              | Version          | Role                                                          |
+| ----------------- | ---------------- | ------------------------------------------------------------- |
+| **vitest**        | 4.x              | Test runner (unified for all tests)                           |
+| **@effect/vitest**| 4.0.0-beta.43    | Effect-native test helpers: `it.effect()`, `it.live()`, Layer injection |
+
 ### Monorepo
 
 | Tool               | Role                                                                                       |
@@ -123,6 +130,7 @@ Traefik (managed by Coolify) routes traffic to each service. PostgreSQL is manag
 ```
 dropthing/
 ├── package.json                # workspaces: ["packages/*", "apps/*"]
+├── vitest.config.ts            # Test config (includes all apps/packages, loads .env)
 ├── tsconfig.json               # Base config + project references
 ├── .oxlintrc.json              # Shared oxlint config
 ├── .husky/pre-commit           # lint-staged hook
@@ -137,6 +145,9 @@ dropthing/
 │   │   ├── tsconfig.json       # Extends root, composite: true
 │   │   └── src/
 │   │       ├── index.ts        # Hono app entrypoint, centralized layer composition + job startup
+│   │       ├── __tests__/
+│   │       │   ├── drop.service.test.ts      # Service invariant tests (Effect Layer injection, mocked deps)
+│   │       │   └── drop.integration.test.ts  # Integration tests (real DB, zero-knowledge proof)
 │   │       ├── common/
 │   │       │   └── helpers.ts  # Shared route helpers (withBasicErrorHandling)
 │   │       ├── db/
@@ -166,7 +177,9 @@ dropthing/
 │           ├── App.tsx         # URL-based routing (/ → UploadPage, /drops/:id → DropPage)
 │           ├── lib/
 │           │   ├── api.ts      # API client (createDrop, getDrop, getFileUrl, isUrl, helpers)
-│           │   └── crypto.ts   # E2EE: AES-256-GCM encrypt/decrypt, key import/export, base64 helpers
+│           │   ├── crypto.ts   # E2EE: AES-256-GCM encrypt/decrypt, key import/export, packFile/unpackFile, base64 helpers
+│           │   └── __tests__/
+│           │       └── crypto.test.ts  # Crypto round-trip, IV uniqueness, wrong key, tampered, pack/unpack
 │           ├── components/
 │           │   └── code-editor.tsx  # CodeMirror 6 wrapper (Tokyo Night, lazy language loading)
 │           └── pages/
@@ -177,7 +190,7 @@ dropthing/
 │       ├── tsconfig.json       # Extends root, composite: true
 │       └── src/
 │           ├── index.ts        # Re-exports schemas + errors + constants
-│           ├── schemas.ts      # Drop, DropJson, DropType, DropMetadata, UploadParams, UUID
+│           ├── schemas.ts      # Drop, DropJson, DropType, DropMetadata, UploadParams (with encrypted field), UUID
 │           ├── errors.ts       # InvalidInputError, FileTooLargeError, StorageError, AiError
 │           └── constants.ts    # MAX_FILE_SIZE, MIN_TTL, MAX_TTL
 ```
@@ -216,11 +229,11 @@ AiService ──────────────────────┘
 
 ### DropService
 
-- `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type), enrich with AI metadata (text/link), compute expiresAt, delegate to repository
+- `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type and not encrypted), enrich with AI metadata (skipped when encrypted), compute expiresAt, delegate to repository
 - `get(id)` — find drop, yield `DropNotFoundError` if missing, yield `DropExpiredError` if expired
 - `getFile(id)` — calls `get`, validates it's a file drop, returns `{ drop, content }` from StorageService
 - `delete(id)` — bypasses expiration (uses `repo.findById`), deletes storage file + DB record
-- `CreateDropInput`: discriminated union (`{ type: 'file'; file: File } | { type: 'text'; content: string } | { type: 'link'; content: string }`)
+- `CreateDropInput`: discriminated union (`{ type: 'file'; file: File; encrypted? } | { type: 'text'; content: string; encrypted? } | { type: 'link'; content: string; encrypted? }`)
 
 ### StorageService
 
@@ -264,7 +277,7 @@ Simple URL-based routing in `App.tsx` (no react-router):
 - **Text tab**: CodeMirror 6 editor (Tokyo Night theme) + language selector dropdown
 - **Auto-detect URL**: if text content is a single valid HTTP(S) URL → sent as `type: 'link'` transparently, with "Link detected" indicator
 - **TTL selector**: 5 min / 1 hour / 1 day / 7 days
-- **Encryption toggle**: opt-in E2EE (hidden when URL detected — links are not encrypted)
+- **Encryption toggle**: opt-in E2EE for any drop type (including links)
 - **After upload**: shows share link (with key fragment if encrypted) + copy-to-clipboard + "Drop another" reset
 
 ### DropPage
@@ -329,7 +342,7 @@ Polymorphic per drop type, no fixed schema enforced at DB level (validated by Ef
 | ------ | ------------------- | ----------------------------------- | -------------------- |
 | `file` | `file` (File)       | Size ≤ 100 MB                       | StorageService (R2 or local) |
 | `text` | `content` (string)  | Non-empty                           | DB `content` column  |
-| `link` | `content` (string)  | Valid URL (`Schema.URLFromString`)   | DB `content` column  |
+| `link` | `content` (string)  | Valid URL (skipped when encrypted)   | DB `content` column  |
 
 Default type: `text`. Link type is auto-detected from text content on the frontend.
 
@@ -378,7 +391,7 @@ Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect
 
 ### Upload (POST /drops)
 
-1. Parse `FormData`: extract `type`, `expiresIn` via `UploadParams` schema
+1. Parse `FormData`: extract `type`, `expiresIn`, `encrypted` via `UploadParams` schema
 2. Extract `file` or `content` from FormData (route)
 3. DropService validates (file size / URL format)
 4. Save file via StorageService if file type
@@ -388,19 +401,20 @@ Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect
 
 ### Encrypted upload flow
 
-1. User enables E2EE toggle (text or file — not links)
+1. User enables E2EE toggle (any drop type)
 2. `generateKey()` → AES-256-GCM `CryptoKey`
-3. **Text**: `encryptText(key, content)` → base64-encoded ciphertext sent as `content`
-4. **File**: `encrypt(key, file.arrayBuffer())` → new `File` from ciphertext bytes
+3. **Text/Link**: `encryptText(key, content)` → base64-encoded ciphertext sent as `content`
+4. **File**: `packFile(fileName, arrayBuffer)` → packs original filename into payload → `encrypt(key, packed)` → new `File` as `encrypted.bin` / `application/octet-stream` (no metadata leakage)
 5. `exportKey(key)` → base64url string appended to share URL as fragment (`#key`)
-6. Server stores ciphertext + `encrypted: true`; AI enrichment is skipped
+6. Server stores ciphertext + `encrypted: true`; AI enrichment and URL validation are skipped
 7. Key never leaves the browser (URL fragment is not sent in HTTP requests)
+8. `UploadParams` schema validates `encrypted` field; input is rejected before reaching the service if malformed
 
 ### Encrypted view flow
 
 1. Extract key from `window.location.hash`
 2. **Text**: `base64ToArrayBuffer(content)` → `decryptText(key, ciphertext)` → display plaintext
-3. **File**: `fetch(fileUrl)` → `decrypt(key, ciphertext)` → `Blob` → browser download
+3. **File**: `fetch(fileUrl)` → `decrypt(key, ciphertext)` → `unpackFile(decrypted)` → recovers original filename + content → `Blob` → browser download with correct filename
 4. Missing key → error message ("Decryption key is missing from the URL")
 
 ### Download (GET /drops/:id/file)
@@ -437,3 +451,4 @@ This project is a hands-on exercise for learning **Effect v4**. Key concepts to 
 - **Stream**: streaming upload/download of large files
 - **Effect.all**: concurrent operations (e.g. cleanup of multiple files)
 - **Effect.fn**: call-site tracing on service/repository methods
+- **Testing with @effect/vitest**: `it.effect()` for service tests with mocked layers, `it.live()` for integration tests with real dependencies, `Layer.succeed` for test doubles

@@ -64,6 +64,26 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+/** Pack filename + content into a single buffer: [2-byte name length][UTF-8 name][content] */
+export function packFile(fileName: string, content: ArrayBuffer): ArrayBuffer {
+  const nameBytes = new TextEncoder().encode(fileName);
+  const packed = new Uint8Array(2 + nameBytes.length + content.byteLength);
+  packed[0] = (nameBytes.length >> 8) & 0xff;
+  packed[1] = nameBytes.length & 0xff;
+  packed.set(nameBytes, 2);
+  packed.set(new Uint8Array(content), 2 + nameBytes.length);
+  return packed.buffer;
+}
+
+/** Unpack filename + content from a decrypted buffer */
+export function unpackFile(data: ArrayBuffer): { fileName: string; content: Uint8Array } {
+  const bytes = new Uint8Array(data);
+  const nameLen = (bytes[0] << 8) | bytes[1];
+  const fileName = new TextDecoder().decode(bytes.slice(2, 2 + nameLen));
+  const content = bytes.slice(2 + nameLen);
+  return { fileName, content };
+}
+
 function base64UrlEncode(bytes: Uint8Array): string {
   const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join('');
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

@@ -36,7 +36,12 @@ export type CreateDropInput =
       readonly expiresIn: number;
       readonly encrypted?: boolean;
     }
-  | { readonly type: 'link'; readonly content: string; readonly expiresIn: number };
+  | {
+      readonly type: 'link';
+      readonly content: string;
+      readonly expiresIn: number;
+      readonly encrypted?: boolean;
+    };
 
 type DropServiceShape = {
   readonly create: (
@@ -107,13 +112,13 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
           });
         }
 
-        if (input.type === 'link') {
+        const encrypted = input.encrypted ?? false;
+
+        if (input.type === 'link' && !encrypted) {
           yield* Schema.decodeUnknownEffect(Schema.URLFromString)(input.content).pipe(
             Effect.mapError(() => new InvalidInputError({ message: 'Invalid URL' }))
           );
         }
-
-        const encrypted = input.type !== 'link' && (input.encrypted ?? false);
 
         const metadata = encrypted
           ? null

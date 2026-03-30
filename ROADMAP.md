@@ -132,21 +132,30 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 ---
 
-## Phase 8 — End-to-end encryption ✓
+## Phase 8 — End-to-end encryption + testing ✓
 
-**Goal**: Opt-in client-side encryption so the server never sees plaintext.
+**Goal**: Opt-in client-side encryption so the server never sees plaintext. Prove it with tests.
+
+**New Effect concepts**: `Schema.check(Schema.makeFilter(...))` for cross-field validation, `@effect/vitest` with `it.effect()`/`it.live()`, `Layer.succeed` for test doubles, `Effect.provide` for dependency injection in tests
 
 **New concepts**: Web Crypto API (`AES-256-GCM`), URL fragment (`#`) for key transport, `ArrayBuffer` ↔ base64 encoding, Blob URLs for decrypted previews
 
-- [x] `crypto.ts` client-side module: `generateKey`, `encrypt`/`decrypt` (AES-256-GCM), `exportKey`/`importKey` (base64url), `encryptText`/`decryptText`
+- [x] `crypto.ts` client-side module: `generateKey`, `encrypt`/`decrypt` (AES-256-GCM), `exportKey`/`importKey` (base64url), `encryptText`/`decryptText`, `packFile`/`unpackFile`
 - [x] IV (12 bytes) prepended to ciphertext — single `ArrayBuffer` for storage
-- [x] `encrypted` boolean column in DB + `Drop` schema + `CreateDropInput`
-- [x] Server-side: skip AI enrichment when `encrypted` flag is set
+- [x] `packFile`/`unpackFile`: packs original filename into encrypted payload (2-byte length prefix + UTF-8 name + content), so the server never sees the real filename
+- [x] `encrypted` boolean column in DB + `Drop` schema + `CreateDropInput` + `UploadParams`
+- [x] `UploadParams` schema: `encrypted` field via `Schema.optionalKey(Schema.Literal('true'))`
+- [x] Server-side: skip AI enrichment and URL validation when `encrypted` flag is set
+- [x] Any drop type can be encrypted (file, text, link)
 - [x] Upload flow: toggle → generate key → encrypt content/file client-side → upload ciphertext → key in URL fragment (`#`)
+- [x] Encrypted file uploads sanitized: sent as `encrypted.bin` / `application/octet-stream` (no filename/MIME metadata leakage)
 - [x] View flow (text): extract key from `window.location.hash` → base64 → ArrayBuffer → decrypt → display
-- [x] View flow (file): fetch ciphertext → decrypt in browser → Blob download
+- [x] View flow (file): fetch ciphertext → decrypt → `unpackFile` recovers original filename → Blob download
 - [x] Missing key UX: clear error message when fragment is absent
-- [x] Links excluded from encryption (public URLs, no value in encrypting)
+- [x] Test infrastructure: vitest + `@effect/vitest` for Effect-native testing
+- [x] Crypto unit tests (14): round-trips, IV uniqueness, wrong key, tampered ciphertext, packFile/unpackFile
+- [x] Service invariant tests (5): encrypted drops skip AI, encrypted links skip URL validation, non-encrypted drops call AI. Uses `Layer.succeed` mock layers + `it.effect()`
+- [x] Integration tests (2): real DB queries proving zero-knowledge (stored content != plaintext). Uses `it.live()` with real Postgres
 
 ---
 

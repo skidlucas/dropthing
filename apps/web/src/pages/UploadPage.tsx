@@ -1,6 +1,13 @@
 import { useState, useRef, type DragEvent } from 'react';
 import { createDrop, TTL_OPTIONS, formatSize, isUrl } from '@/lib/api';
-import { generateKey, exportKey, encryptText, encrypt, arrayBufferToBase64 } from '@/lib/crypto';
+import {
+  generateKey,
+  exportKey,
+  encryptText,
+  encrypt,
+  arrayBufferToBase64,
+  packFile,
+} from '@/lib/crypto';
 import { CodeEditor, languages } from '@/components/code-editor';
 import type { DropJson } from '@dropthing/shared';
 
@@ -44,9 +51,11 @@ export function UploadPage() {
         fragment = await exportKey(key);
 
         if (mode === 'file' && file) {
-          const plaintext = await file.arrayBuffer();
-          const ciphertext = await encrypt(key, plaintext);
-          uploadFile = new File([ciphertext], file.name, { type: file.type });
+          const packed = packFile(file.name, await file.arrayBuffer());
+          const ciphertext = await encrypt(key, packed);
+          uploadFile = new File([ciphertext], 'encrypted.bin', {
+            type: 'application/octet-stream',
+          });
         } else if (mode === 'text') {
           const ciphertext = await encryptText(key, content);
           uploadContent = arrayBufferToBase64(ciphertext);

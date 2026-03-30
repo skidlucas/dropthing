@@ -40,6 +40,7 @@ export const UploadParams = Schema.Struct({
   expiresIn: Schema.NumberFromString.pipe(
     Schema.check(Schema.isBetween({ minimum: MIN_TTL, maximum: MAX_TTL }))
   ),
+  encrypted: Schema.optionalKey(Schema.Literal('true')),
 });
 
 export type UploadParams = typeof UploadParams.Type;

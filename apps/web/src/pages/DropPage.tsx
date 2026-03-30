@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DropJson } from '@dropthing/shared';
 import { getDrop, getFileUrl, formatSize, timeRemaining } from '@/lib/api';
-import { importKey, decrypt, decryptText, base64ToArrayBuffer } from '@/lib/crypto';
+import { importKey, decrypt, decryptText, base64ToArrayBuffer, unpackFile } from '@/lib/crypto';
 import { CodeEditor } from '@/components/code-editor';
 
 export function DropPage({ id }: { id: string }) {
@@ -46,12 +46,13 @@ export function DropPage({ id }: { id: string }) {
       const res = await fetch(getFileUrl(id));
       const ciphertext = await res.arrayBuffer();
       const key = await importKey(keyString);
-      const plaintext = await decrypt(key, ciphertext);
-      const blob = new Blob([plaintext], { type: drop.mimeType ?? 'application/octet-stream' });
+      const decrypted = await decrypt(key, ciphertext);
+      const { fileName, content } = unpackFile(decrypted);
+      const blob = new Blob([content.buffer as ArrayBuffer]);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = drop.fileName ?? 'download';
+      a.download = fileName;
       a.click();
       URL.revokeObjectURL(url);
     } catch {

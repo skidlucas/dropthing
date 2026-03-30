@@ -9,10 +9,16 @@ import { withBasicErrorHandling } from '../../common/helpers.js';
 type AppRuntime = ManagedRuntime.ManagedRuntime<DropService, any>;
 
 const parseParams = Effect.fn('drops.parseParams')(function* (formData: FormData) {
-  return yield* Schema.decodeUnknownEffect(UploadParams)({
+  const obj: Record<string, unknown> = {
     type: formData.get('type'),
     expiresIn: formData.get('expiresIn'),
-  }).pipe(Effect.mapError((e) => new InvalidInputError({ message: e.message })));
+  };
+  const encrypted = formData.get('encrypted');
+  if (encrypted) obj.encrypted = encrypted;
+
+  return yield* Schema.decodeUnknownEffect(UploadParams)(obj).pipe(
+    Effect.mapError((e) => new InvalidInputError({ message: e.message }))
+  );
 });
 
 export default function dropRoutes(runtime: AppRuntime) {
@@ -26,7 +32,7 @@ export default function dropRoutes(runtime: AppRuntime) {
       Effect.gen(function* () {
         const params = yield* parseParams(formData);
         const dropService = yield* DropService;
-        const encrypted = formData.get('encrypted') === 'true';
+        const encrypted = params.encrypted === 'true';
 
         let input: CreateDropInput;
 
@@ -45,7 +51,7 @@ export default function dropRoutes(runtime: AppRuntime) {
             type: params.type,
             content,
             expiresIn: params.expiresIn,
-            ...(params.type !== 'link' ? { encrypted } : {}),
+            encrypted,
           };
         }
 

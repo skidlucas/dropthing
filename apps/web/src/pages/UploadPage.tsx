@@ -293,19 +293,21 @@ export function UploadPage() {
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-950 text-neutral-50 px-4">
+    <main className="min-h-screen flex items-center justify-center bg-neutral-950 text-neutral-50 px-4">
       <div className="w-full max-w-md space-y-8">
-        <div className="text-center space-y-1">
-          <a
-            href="/"
-            className="text-3xl font-bold tracking-tight hover:opacity-80 transition-opacity"
-          >
-            dropthing
-          </a>
+        <header className="text-center space-y-1">
+          <h1>
+            <a
+              href="/"
+              className="text-3xl font-bold tracking-tight hover:opacity-80 transition-opacity"
+            >
+              dropthing
+            </a>
+          </h1>
           <p className="text-neutral-500 text-sm">drop and share your stuff</p>
-        </div>
+        </header>
         {children}
       </div>
-    </div>
+    </main>
   );
 }

@@ -69,16 +69,18 @@ export function DropPage({ id }: { id: string }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-950 text-neutral-50 px-4">
+    <main className="min-h-screen flex items-center justify-center bg-neutral-950 text-neutral-50 px-4">
       <div className={`w-full space-y-8 ${drop?.type === 'text' ? 'max-w-2xl' : 'max-w-md'}`}>
-        <div className="text-center">
-          <a
-            href="/"
-            className="text-3xl font-bold tracking-tight hover:opacity-80 transition-opacity"
-          >
-            dropthing
-          </a>
-        </div>
+        <header className="text-center">
+          <h1>
+            <a
+              href="/"
+              className="text-3xl font-bold tracking-tight hover:opacity-80 transition-opacity"
+            >
+              dropthing
+            </a>
+          </h1>
+        </header>
 
         {!drop && !error && <p className="text-center text-neutral-500">Loading...</p>}
 
@@ -97,9 +99,9 @@ export function DropPage({ id }: { id: string }) {
         {drop && drop.type === 'file' && (
           <div className="space-y-6">
             <div className="text-center space-y-2">
-              <p className="text-neutral-200 font-medium text-lg">
+              <h2 className="text-neutral-200 font-medium text-lg">
                 {drop.metadata?.title ?? drop.fileName}
-              </p>
+              </h2>
               {drop.metadata?.title && <p className="text-neutral-500 text-sm">{drop.fileName}</p>}
               <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
                 {drop.size && <span>{formatSize(drop.size)}</span>}
@@ -137,7 +139,7 @@ export function DropPage({ id }: { id: string }) {
           <div className="space-y-6">
             <div className="text-center space-y-2">
               {drop.metadata?.title && (
-                <p className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</p>
+                <h2 className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</h2>
               )}
               <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
                 {drop.encrypted && <span className="text-amber-400/80">Encrypted</span>}
@@ -179,7 +181,7 @@ export function DropPage({ id }: { id: string }) {
           <div className="space-y-6">
             <div className="text-center space-y-2">
               {drop.metadata?.title && (
-                <p className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</p>
+                <h2 className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</h2>
               )}
               <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
                 <span>Shared link</span>
@@ -216,6 +218,6 @@ export function DropPage({ id }: { id: string }) {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }

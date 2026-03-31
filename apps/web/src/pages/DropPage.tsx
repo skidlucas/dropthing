@@ -1,96 +1,22 @@
-import { useEffect, useState } from 'react';
-import type { DropJson } from '@dropthing/shared';
-import { getDrop, getFileUrl, formatSize, timeRemaining } from '@/lib/api';
-import { importKey, decrypt, decryptText, base64ToArrayBuffer, unpackFile } from '@/lib/crypto';
-import { getPreviewType, mimeFromExtension, type PreviewType } from '@/lib/preview';
+import { useState } from 'react';
+import { getFileUrl, formatSize, timeRemaining } from '@/lib/api';
+import { importKey, decrypt, unpackFile } from '@/lib/crypto';
+import { useDrop } from '@/hooks/useDrop';
+import { useFilePreview } from '@/hooks/useFilePreview';
+import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { CodeEditor } from '@/components/code-editor';
 
 export function DropPage({ id }: { id: string }) {
-  const [drop, setDrop] = useState<DropJson | null>(null);
-  const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
-  const [decrypting, setDecrypting] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewType, setPreviewType] = useState<PreviewType | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [decryptedFileName, setDecryptedFileName] = useState<string | null>(null);
-
   const keyString = window.location.hash.slice(1);
-
-  useEffect(() => {
-    getDrop(id)
-      .then(async (d) => {
-        setDrop(d);
-
-        // Encrypted text/link: decrypt content
-        if (d.encrypted && d.type === 'text' && d.content) {
-          if (!keyString) {
-            setError('This drop is encrypted. The decryption key is missing from the URL.');
-            return;
-          }
-          setDecrypting(true);
-          try {
-            const key = await importKey(keyString);
-            const ciphertext = base64ToArrayBuffer(d.content);
-            const plaintext = await decryptText(key, ciphertext);
-            setDecryptedContent(plaintext);
-          } catch {
-            setError('Decryption failed — invalid key');
-          } finally {
-            setDecrypting(false);
-          }
-        }
-
-        // Non-encrypted file: check if previewable from MIME type
-        if (!d.encrypted && d.type === 'file' && d.mimeType) {
-          const type = getPreviewType(d.mimeType);
-          if (type) {
-            setPreviewType(type);
-            setPreviewUrl(getFileUrl(id));
-          }
-        }
-
-        // Encrypted file: decrypt to recover real filename + create preview if applicable
-        if (d.encrypted && d.type === 'file' && keyString) {
-          setPreviewLoading(true);
-          try {
-            const res = await fetch(getFileUrl(id));
-            const ciphertext = await res.arrayBuffer();
-            const key = await importKey(keyString);
-            const decrypted = await decrypt(key, ciphertext);
-            const { fileName, content } = unpackFile(decrypted);
-            setDecryptedFileName(fileName);
-            const mime = mimeFromExtension(fileName);
-            const type = mime ? getPreviewType(mime) : null;
-            if (type && mime) {
-              const blob = new Blob([content.buffer as ArrayBuffer], { type: mime });
-              setPreviewUrl(URL.createObjectURL(blob));
-              setPreviewType(type);
-            }
-          } catch {
-            // Decrypt failed silently — download button will retry
-          } finally {
-            setPreviewLoading(false);
-          }
-        }
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : '';
-        if (msg.includes('not found'))
-          setError('This drop doesn\u2019t exist or has been deleted.');
-        else if (msg.includes('expired')) setError('This drop has expired.');
-        else setError('Failed to load this drop. Please check the link and try again.');
-      });
-  }, [id, keyString]);
-
-  // Cleanup Blob URLs on unmount
-  useEffect(() => {
-    return () => {
-      if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
+  const { drop, decryptedContent, isLoading, error } = useDrop(id, keyString);
+  const {
+    previewUrl,
+    previewType,
+    isLoading: previewLoading,
+    decryptedFileName,
+  } = useFilePreview(drop, id, keyString);
+  const { copied, copy } = useCopyFeedback();
+  const [downloading, setDownloading] = useState(false);
 
   async function handleEncryptedDownload() {
     if (!drop || !keyString) return;
@@ -109,16 +35,10 @@ export function DropPage({ id }: { id: string }) {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      setError('Failed to decrypt file');
+      // Download error — user can retry
     } finally {
       setDownloading(false);
     }
-  }
-
-  function handleCopy(text: string) {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -137,7 +57,7 @@ export function DropPage({ id }: { id: string }) {
           </h1>
         </header>
 
-        {!drop && !error && (
+        {isLoading && (
           <div className="flex justify-center gap-1.5">
             {[0, 1, 2].map((i) => (
               <div
@@ -251,9 +171,7 @@ export function DropPage({ id }: { id: string }) {
               </div>
             </div>
 
-            {decrypting ? (
-              <p className="text-center text-neutral-500">Decrypting...</p>
-            ) : drop.encrypted && !keyString ? (
+            {drop.encrypted && !keyString ? (
               <p className="text-red-400 text-sm text-center">
                 Decryption key is missing from the URL
               </p>
@@ -269,7 +187,7 @@ export function DropPage({ id }: { id: string }) {
                 <button
                   type="button"
                   onClick={() =>
-                    handleCopy(drop.encrypted ? (decryptedContent ?? '') : (drop.content ?? ''))
+                    copy(drop.encrypted ? (decryptedContent ?? '') : (drop.content ?? ''))
                   }
                   className="w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors"
                 >
@@ -312,7 +230,7 @@ export function DropPage({ id }: { id: string }) {
               </a>
               <button
                 type="button"
-                onClick={() => handleCopy(drop.content ?? '')}
+                onClick={() => copy(drop.content ?? '')}
                 className="flex-1 py-2.5 border border-neutral-700 text-neutral-200 rounded-lg font-medium hover:bg-neutral-800 transition-colors"
               >
                 {copied ? 'Copied!' : 'Copy'}

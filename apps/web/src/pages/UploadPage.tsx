@@ -1,15 +1,8 @@
 import { useState, useRef, type DragEvent } from 'react';
-import { createDrop, TTL_OPTIONS, formatSize, isUrl } from '@/lib/api';
-import {
-  generateKey,
-  exportKey,
-  encryptText,
-  encrypt,
-  arrayBufferToBase64,
-  packFile,
-} from '@/lib/crypto';
+import { TTL_OPTIONS, formatSize, isUrl } from '@/lib/api';
+import { useUploadDrop } from '@/hooks/useUploadDrop';
+import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { CodeEditor, languages } from '@/components/code-editor';
-import type { DropJson } from '@dropthing/shared';
 
 type UploadMode = 'file' | 'text';
 
@@ -20,62 +13,21 @@ export function UploadPage() {
   const [content, setContent] = useState('');
   const [language, setLanguage] = useState('');
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<DropJson | null>(null);
-  const [copied, setCopied] = useState(false);
   const [encrypted, setEncrypted] = useState(false);
-  const [keyFragment, setKeyFragment] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const shareUrl = result
-    ? `${window.location.origin}/drops/${result.id}${keyFragment ? `#${keyFragment}` : ''}`
-    : '';
+  const { upload, result, uploading, error, reset } = useUploadDrop();
+  const { copied, copy } = useCopyFeedback();
+
   const contentIsUrl = mode === 'text' && isUrl(content);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const shareUrl = result
+    ? `${window.location.origin}/drops/${result.drop.id}${result.keyFragment ? `#${result.keyFragment}` : ''}`
+    : '';
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setUploading(true);
-
-    try {
-      const type = contentIsUrl ? 'link' : mode;
-      const shouldEncrypt = encrypted && !contentIsUrl;
-
-      let uploadFile = mode === 'file' ? (file ?? undefined) : undefined;
-      let uploadContent = mode === 'text' ? content : undefined;
-      let fragment = '';
-
-      if (shouldEncrypt) {
-        const key = await generateKey();
-        fragment = await exportKey(key);
-
-        if (mode === 'file' && file) {
-          const packed = packFile(file.name, await file.arrayBuffer());
-          const ciphertext = await encrypt(key, packed);
-          uploadFile = new File([ciphertext], 'encrypted.bin', {
-            type: 'application/octet-stream',
-          });
-        } else if (mode === 'text') {
-          const ciphertext = await encryptText(key, content);
-          uploadContent = arrayBufferToBase64(ciphertext);
-        }
-      }
-
-      const drop = await createDrop({
-        type,
-        expiresIn: ttl,
-        file: uploadFile,
-        content: uploadContent,
-        encrypted: shouldEncrypt,
-      });
-      setKeyFragment(fragment);
-      setResult(drop);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
+    upload({ mode, ttl, file, content, encrypted, contentIsUrl });
   }
 
   function handleDrop(e: DragEvent) {
@@ -88,20 +40,12 @@ export function UploadPage() {
     }
   }
 
-  function handleCopy() {
-    navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
   function handleReset() {
-    setResult(null);
+    reset();
     setFile(null);
     setContent('');
     setLanguage('');
     setEncrypted(false);
-    setKeyFragment('');
-    setError(null);
   }
 
   const isValid =
@@ -114,17 +58,17 @@ export function UploadPage() {
           <div className="text-center space-y-2">
             <div className="text-green-400 text-lg font-medium">Uploaded</div>
             <p className="text-neutral-400 text-sm">
-              {result.metadata?.title ??
-                (result.type === 'file'
+              {result.drop.metadata?.title ??
+                (result.drop.type === 'file'
                   ? encrypted
                     ? file?.name
-                    : result.fileName
-                  : result.type + ' drop')}
+                    : result.drop.fileName
+                  : result.drop.type + ' drop')}
             </p>
           </div>
 
           <div className="space-y-3">
-            {keyFragment && (
+            {result.keyFragment && (
               <p className="text-amber-400/80 text-xs text-center">
                 Encrypted — the decryption key is embedded in the link
               </p>
@@ -134,7 +78,7 @@ export function UploadPage() {
             </div>
             <button
               type="button"
-              onClick={handleCopy}
+              onClick={() => copy(shareUrl)}
               className="w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors"
             >
               {copied ? 'Copied!' : 'Copy link'}

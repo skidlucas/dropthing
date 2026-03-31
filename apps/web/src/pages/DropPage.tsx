@@ -36,7 +36,13 @@ export function DropPage({ id }: { id: string }) {
           }
         }
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load'));
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('not found'))
+          setError('This drop doesn\u2019t exist or has been deleted.');
+        else if (msg.includes('expired')) setError('This drop has expired.');
+        else setError('Failed to load this drop. Please check the link and try again.');
+      });
   }, [id, keyString]);
 
   async function handleEncryptedDownload() {

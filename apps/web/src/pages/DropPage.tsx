@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { DropJson } from '@dropthing/shared';
 import { getDrop, getFileUrl, formatSize, timeRemaining } from '@/lib/api';
 import { importKey, decrypt, decryptText, base64ToArrayBuffer, unpackFile } from '@/lib/crypto';
+import { getPreviewType, mimeFromExtension, type PreviewType } from '@/lib/preview';
 import { CodeEditor } from '@/components/code-editor';
 
 export function DropPage({ id }: { id: string }) {
@@ -11,6 +12,9 @@ export function DropPage({ id }: { id: string }) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<PreviewType | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const keyString = window.location.hash.slice(1);
 
@@ -18,6 +22,8 @@ export function DropPage({ id }: { id: string }) {
     getDrop(id)
       .then(async (d) => {
         setDrop(d);
+
+        // Encrypted text/link: decrypt content
         if (d.encrypted && d.type === 'text' && d.content) {
           if (!keyString) {
             setError('This drop is encrypted. The decryption key is missing from the URL.');
@@ -35,6 +41,38 @@ export function DropPage({ id }: { id: string }) {
             setDecrypting(false);
           }
         }
+
+        // Non-encrypted file: check if previewable from MIME type
+        if (!d.encrypted && d.type === 'file' && d.mimeType) {
+          const type = getPreviewType(d.mimeType);
+          if (type) {
+            setPreviewType(type);
+            setPreviewUrl(getFileUrl(id));
+          }
+        }
+
+        // Encrypted file: decrypt and create Blob URL for preview
+        if (d.encrypted && d.type === 'file' && keyString) {
+          setPreviewLoading(true);
+          try {
+            const res = await fetch(getFileUrl(id));
+            const ciphertext = await res.arrayBuffer();
+            const key = await importKey(keyString);
+            const decrypted = await decrypt(key, ciphertext);
+            const { fileName, content } = unpackFile(decrypted);
+            const mime = mimeFromExtension(fileName);
+            const type = mime ? getPreviewType(mime) : null;
+            if (type && mime) {
+              const blob = new Blob([content.buffer as ArrayBuffer], { type: mime });
+              setPreviewUrl(URL.createObjectURL(blob));
+              setPreviewType(type);
+            }
+          } catch {
+            // Preview failed silently — download still works
+          } finally {
+            setPreviewLoading(false);
+          }
+        }
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : '';
@@ -44,6 +82,13 @@ export function DropPage({ id }: { id: string }) {
         else setError('Failed to load this drop. Please check the link and try again.');
       });
   }, [id, keyString]);
+
+  // Cleanup Blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   async function handleEncryptedDownload() {
     if (!drop || !keyString) return;
@@ -76,7 +121,9 @@ export function DropPage({ id }: { id: string }) {
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-neutral-950 text-neutral-50 px-4">
-      <div className={`w-full space-y-8 ${drop?.type === 'text' ? 'max-w-2xl' : 'max-w-md'}`}>
+      <div
+        className={`w-full space-y-8 ${drop?.type === 'text' || previewType === 'image' || previewType === 'video' ? 'max-w-2xl' : 'max-w-md'}`}
+      >
         <header className="text-center">
           <h1>
             <a
@@ -125,6 +172,42 @@ export function DropPage({ id }: { id: string }) {
                 <span>expires in {timeRemaining(drop.expiresAt)}</span>
               </div>
             </div>
+
+            {previewLoading && (
+              <div className="flex justify-center gap-1.5 py-8">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="w-2 h-2 rounded-full bg-neutral-500 animate-pulse"
+                    style={{ animationDelay: `${i * 150}ms` }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {previewUrl && previewType === 'image' && (
+              <img
+                src={previewUrl}
+                alt={drop.fileName ?? 'Preview'}
+                className="w-full rounded-lg border border-neutral-800"
+              />
+            )}
+
+            {previewUrl && previewType === 'video' && (
+              <video
+                src={previewUrl}
+                controls
+                className="w-full rounded-lg border border-neutral-800"
+              >
+                <track kind="captions" />
+              </video>
+            )}
+
+            {previewUrl && previewType === 'audio' && (
+              <audio src={previewUrl} controls className="w-full">
+                <track kind="captions" />
+              </audio>
+            )}
 
             {drop.encrypted && !keyString ? (
               <p className="text-red-400 text-sm text-center">

@@ -17,14 +17,13 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 - **Automatic cleanup**: periodic job that purges expired drops (file + metadata)
 - **AI metadata**: language detection + title generation via Groq (`llama-3.3-70b-versatile`)
 - **End-to-end encryption**: opt-in AES-256-GCM client-side encryption for any drop type; decryption key in URL fragment (never sent to server)
+- **File preview**: inline preview for images, videos, and audio — works with E2EE via decrypted Blob URLs (MIME detection via `mime` lib)
 
 ## Future improvements
 
 - Password protection
 - Download count limit
-- QR code for sharing links between devices
 - On-the-fly image compression
-- File preview (images, videos, text)
 - Streaming upload for large files
 
 ---
@@ -73,6 +72,7 @@ Storage is abstracted behind a `StorageService` (Effect Layer). Two implementati
 | **Tailwind CSS**              | 4.x     | Utility-first styling                                                               |
 | **CodeMirror 6**              | 4.25.9  | Code editor (via `@uiw/react-codemirror`) with Tokyo Night theme                   |
 | **@codemirror/language-data** | 6.5.2   | Lazy-loaded language grammars for syntax highlighting                               |
+| **mime**                      | 4.x     | IANA MIME type database — maps file extensions to MIME types for encrypted file previews |
 
 ### AI
 
@@ -178,6 +178,7 @@ dropthing/
 │           ├── lib/
 │           │   ├── api.ts      # API client (createDrop, getDrop, getFileUrl, isUrl, helpers)
 │           │   ├── crypto.ts   # E2EE: AES-256-GCM encrypt/decrypt, key import/export, packFile/unpackFile, base64 helpers
+│           │   ├── preview.ts  # File preview helpers: getPreviewType, mimeFromExtension (via mime lib)
 │           │   └── __tests__/
 │           │       └── crypto.test.ts  # Crypto round-trip, IV uniqueness, wrong key, tampered, pack/unpack
 │           ├── components/
@@ -282,7 +283,8 @@ Simple URL-based routing in `App.tsx` (no react-router):
 
 ### DropPage
 
-- **File drops**: AI title (or filename as fallback), size, expiry time, download button (`max-w-md`)
+- **File drops**: AI title (or filename as fallback), size, expiry time, download button. Inline preview for images (`<img>`), videos (`<video controls>`), and audio (`<audio controls>`) — container widens to `max-w-2xl` for image/video previews, stays `max-w-md` otherwise
+- **File preview (encrypted)**: auto-decrypts on load → `unpackFile` recovers original filename → MIME inferred via `mime` lib → Blob URL for preview. Blob URL revoked on unmount. Falls back silently to download-only if decryption or MIME detection fails
 - **Text drops**: CodeMirror 6 read-only viewer with AI-detected syntax highlighting (`metadata.language`), AI title as heading, copy button (`max-w-2xl` for code readability)
 - **Link drops**: AI title as heading, clickable URL, open + copy buttons (`max-w-md`)
 - **Encrypted drops**: decryption key extracted from URL fragment (`#`), content decrypted client-side. Missing key shows error. File download triggers fetch → decrypt → Blob download.

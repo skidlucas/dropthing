@@ -163,8 +163,7 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 Pick from:
 
-- [ ] File preview (images, videos, audio) — works with E2EE via decrypted Blob URLs
-- [ ] QR code generation for share links
+- [x] File preview (images, videos, audio) — works with E2EE via decrypted Blob URLs
 - [ ] Password-protected shares
 - [ ] Download count limit
 - [ ] On-the-fly image compression

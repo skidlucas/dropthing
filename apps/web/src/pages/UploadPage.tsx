@@ -115,7 +115,11 @@ export function UploadPage() {
             <div className="text-green-400 text-lg font-medium">Uploaded</div>
             <p className="text-neutral-400 text-sm">
               {result.metadata?.title ??
-                (result.type === 'file' ? result.fileName : result.type + ' drop')}
+                (result.type === 'file'
+                  ? encrypted
+                    ? file?.name
+                    : result.fileName
+                  : result.type + ' drop')}
             </p>
           </div>
 

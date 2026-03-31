@@ -15,6 +15,7 @@ export function DropPage({ id }: { id: string }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<PreviewType | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [decryptedFileName, setDecryptedFileName] = useState<string | null>(null);
 
   const keyString = window.location.hash.slice(1);
 
@@ -51,7 +52,7 @@ export function DropPage({ id }: { id: string }) {
           }
         }
 
-        // Encrypted file: decrypt and create Blob URL for preview
+        // Encrypted file: decrypt to recover real filename + create preview if applicable
         if (d.encrypted && d.type === 'file' && keyString) {
           setPreviewLoading(true);
           try {
@@ -60,6 +61,7 @@ export function DropPage({ id }: { id: string }) {
             const key = await importKey(keyString);
             const decrypted = await decrypt(key, ciphertext);
             const { fileName, content } = unpackFile(decrypted);
+            setDecryptedFileName(fileName);
             const mime = mimeFromExtension(fileName);
             const type = mime ? getPreviewType(mime) : null;
             if (type && mime) {
@@ -68,7 +70,7 @@ export function DropPage({ id }: { id: string }) {
               setPreviewType(type);
             }
           } catch {
-            // Preview failed silently — download still works
+            // Decrypt failed silently — download button will retry
           } finally {
             setPreviewLoading(false);
           }
@@ -163,9 +165,11 @@ export function DropPage({ id }: { id: string }) {
           <div className="space-y-6">
             <div className="text-center space-y-2">
               <h2 className="text-neutral-200 font-medium text-lg">
-                {drop.metadata?.title ?? drop.fileName}
+                {drop.metadata?.title ?? decryptedFileName ?? drop.fileName}
               </h2>
-              {drop.metadata?.title && <p className="text-neutral-500 text-sm">{drop.fileName}</p>}
+              {drop.metadata?.title && (
+                <p className="text-neutral-500 text-sm">{decryptedFileName ?? drop.fileName}</p>
+              )}
               <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
                 {drop.size && <span>{formatSize(drop.size)}</span>}
                 {drop.encrypted && <span className="text-amber-400/80">Encrypted</span>}

@@ -159,7 +159,7 @@ export function UploadPage() {
               key={m}
               type="button"
               onClick={() => setMode(m)}
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-colors ${
                 mode === m
                   ? 'bg-neutral-50 text-neutral-950'
                   : 'text-neutral-400 hover:text-neutral-200'
@@ -214,7 +214,7 @@ export function UploadPage() {
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1 text-neutral-400 text-xs focus:outline-none focus:border-neutral-500"
+                className="bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-400 text-sm focus:outline-none focus:border-neutral-500"
               >
                 <option value="">Plain Text</option>
                 {languages.map((l) => (
@@ -256,12 +256,14 @@ export function UploadPage() {
 
         {/* Encryption toggle */}
         {!contentIsUrl && (
-          <label className="flex items-center gap-3 cursor-pointer group">
+          <label className="flex items-center gap-3 min-h-[44px] cursor-pointer group">
             <input
               type="checkbox"
               className="sr-only peer"
               checked={encrypted}
               onChange={(e) => setEncrypted(e.target.checked)}
+              role="switch"
+              aria-checked={encrypted}
             />
             <div
               className={`w-9 h-5 rounded-full relative transition-colors ${encrypted ? 'bg-green-600' : 'bg-neutral-700'}`}

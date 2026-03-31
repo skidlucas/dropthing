@@ -88,7 +88,17 @@ export function DropPage({ id }: { id: string }) {
           </h1>
         </header>
 
-        {!drop && !error && <p className="text-center text-neutral-500">Loading...</p>}
+        {!drop && !error && (
+          <div className="flex justify-center gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-2 h-2 rounded-full bg-neutral-500 animate-pulse"
+                style={{ animationDelay: `${i * 150}ms` }}
+              />
+            ))}
+          </div>
+        )}
 
         {error && (
           <div className="text-center space-y-4">

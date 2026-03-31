@@ -1,5 +1,6 @@
 import { UploadPage } from '@/pages/UploadPage';
 import { DropPage } from '@/pages/DropPage';
+import { NotFoundPage } from '@/pages/NotFoundPage';
 
 export function App() {
   const path = window.location.pathname;
@@ -9,5 +10,9 @@ export function App() {
     return <DropPage id={dropMatch[1]} />;
   }
 
-  return <UploadPage />;
+  if (path === '/') {
+    return <UploadPage />;
+  }
+
+  return <NotFoundPage />;
 }

@@ -199,7 +199,20 @@ export function UploadPage() {
                 <p className="text-neutral-500 text-sm">{formatSize(file.size)}</p>
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-2">
+                <svg
+                  className="mx-auto w-8 h-8 text-neutral-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+                  />
+                </svg>
                 <p className="text-neutral-400">Drop a file here</p>
                 <p className="text-neutral-600 text-sm">or click to browse</p>
               </div>

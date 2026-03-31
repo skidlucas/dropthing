@@ -214,7 +214,7 @@ export function UploadPage() {
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-400 text-sm focus:outline-none focus:border-neutral-500"
+                className="bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-400 text-sm focus-visible:border-neutral-500"
               >
                 <option value="">Plain Text</option>
                 {languages.map((l) => (
@@ -244,7 +244,7 @@ export function UploadPage() {
           <select
             value={ttl}
             onChange={(e) => setTtl(Number(e.target.value))}
-            className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-200 text-sm focus:outline-none focus:border-neutral-500"
+            className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-200 text-sm focus-visible:border-neutral-500"
           >
             {TTL_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>

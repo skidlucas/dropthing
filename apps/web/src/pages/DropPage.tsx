@@ -1,10 +1,18 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { getFileUrl, formatSize, timeRemaining } from '@/lib/api';
 import { importKey, decrypt, unpackFile } from '@/lib/crypto';
 import { useDrop } from '@/hooks/useDrop';
 import { useFilePreview } from '@/hooks/useFilePreview';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { CodeEditor } from '@/components/code-editor';
+
+const fadeIn = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+  transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] as const },
+};
 
 export function DropPage({ id }: { id: string }) {
   const keyString = window.location.hash.slice(1);
@@ -15,7 +23,7 @@ export function DropPage({ id }: { id: string }) {
     isLoading: previewLoading,
     decryptedFileName,
   } = useFilePreview(drop, id, keyString);
-  const { copied, copy } = useCopyFeedback();
+  const { copy } = useCopyFeedback();
   const [downloading, setDownloading] = useState(false);
 
   async function handleEncryptedDownload() {
@@ -57,187 +65,197 @@ export function DropPage({ id }: { id: string }) {
           </h1>
         </header>
 
-        {isLoading && (
-          <div className="flex justify-center gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="w-2 h-2 rounded-full bg-neutral-500 animate-pulse"
-                style={{ animationDelay: `${i * 150}ms` }}
-              />
-            ))}
-          </div>
-        )}
-
-        {error && (
-          <div className="text-center space-y-4">
-            <p className="text-red-400">{error}</p>
-            <a
-              href="/"
-              className="inline-block text-neutral-400 hover:text-neutral-200 text-sm transition-colors"
-            >
-              Back to home
-            </a>
-          </div>
-        )}
-
-        {drop && drop.type === 'file' && (
-          <div className="space-y-6">
-            <div className="text-center space-y-2">
-              <h2 className="text-neutral-200 font-medium text-lg">
-                {drop.metadata?.title ?? decryptedFileName ?? drop.fileName}
-              </h2>
-              {drop.metadata?.title && (
-                <p className="text-neutral-500 text-sm">{decryptedFileName ?? drop.fileName}</p>
-              )}
-              <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
-                {drop.size && <span>{formatSize(drop.size)}</span>}
-                {drop.encrypted && <span className="text-amber-400/80">Encrypted</span>}
-                <span>expires in {timeRemaining(drop.expiresAt)}</span>
-              </div>
-            </div>
-
-            {previewLoading && (
-              <div className="flex justify-center gap-1.5 py-8">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="w-2 h-2 rounded-full bg-neutral-500 animate-pulse"
-                    style={{ animationDelay: `${i * 150}ms` }}
-                  />
-                ))}
-              </div>
-            )}
-
-            {previewUrl && previewType === 'image' && (
-              <img
-                src={previewUrl}
-                alt={drop.fileName ?? 'Preview'}
-                className="w-full rounded-lg border border-neutral-800"
-              />
-            )}
-
-            {previewUrl && previewType === 'video' && (
-              <video
-                src={previewUrl}
-                controls
-                className="w-full rounded-lg border border-neutral-800"
-              >
-                <track kind="captions" />
-              </video>
-            )}
-
-            {previewUrl && previewType === 'audio' && (
-              <audio src={previewUrl} controls className="w-full">
-                <track kind="captions" />
-              </audio>
-            )}
-
-            {drop.encrypted && !keyString ? (
-              <p className="text-red-400 text-sm text-center">
-                Decryption key is missing from the URL
-              </p>
-            ) : drop.encrypted ? (
-              <button
-                type="button"
-                onClick={handleEncryptedDownload}
-                disabled={downloading}
-                className="w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors disabled:opacity-40"
-              >
-                {downloading ? 'Decrypting...' : 'Decrypt & Download'}
-              </button>
-            ) : (
-              <a
-                href={getFileUrl(id)}
-                download
-                className="block w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors text-center"
-              >
-                Download
-              </a>
-            )}
-          </div>
-        )}
-
-        {drop && drop.type === 'text' && (
-          <div className="space-y-6">
-            <div className="text-center space-y-2">
-              {drop.metadata?.title && (
-                <h2 className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</h2>
-              )}
-              <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
-                {drop.encrypted && <span className="text-amber-400/80">Encrypted</span>}
-                <span>{drop.metadata?.language ?? 'Text snippet'}</span>
-                <span>expires in {timeRemaining(drop.expiresAt)}</span>
-              </div>
-            </div>
-
-            {drop.encrypted && !keyString ? (
-              <p className="text-red-400 text-sm text-center">
-                Decryption key is missing from the URL
-              </p>
-            ) : (
-              <>
-                <CodeEditor
-                  value={drop.encrypted ? (decryptedContent ?? '') : (drop.content ?? '')}
-                  readOnly
-                  maxHeight="600px"
-                  {...(drop.metadata?.language != null ? { language: drop.metadata.language } : {})}
+        <AnimatePresence mode="wait">
+          {isLoading && (
+            <motion.div key="loading" {...fadeIn} className="flex justify-center gap-1.5">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="w-2 h-2 rounded-full bg-neutral-500 animate-pulse"
+                  style={{ animationDelay: `${i * 150}ms` }}
                 />
+              ))}
+            </motion.div>
+          )}
 
+          {error && (
+            <motion.div key="error" {...fadeIn} className="text-center space-y-4">
+              <p className="text-red-400">{error}</p>
+              <a
+                href="/"
+                className="inline-block text-neutral-400 hover:text-neutral-200 text-sm transition-colors"
+              >
+                Back to home
+              </a>
+            </motion.div>
+          )}
+
+          {drop && drop.type === 'file' && (
+            <motion.div key="file" {...fadeIn} className="space-y-6">
+              <div className="text-center space-y-2">
+                <h2 className="text-neutral-200 font-medium text-lg">
+                  {drop.metadata?.title ?? decryptedFileName ?? drop.fileName}
+                </h2>
+                {drop.metadata?.title && (
+                  <p className="text-neutral-500 text-sm">{decryptedFileName ?? drop.fileName}</p>
+                )}
+                <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
+                  {drop.size && <span>{formatSize(drop.size)}</span>}
+                  {drop.encrypted && <span className="text-amber-400/80">Encrypted</span>}
+                  <span>expires in {timeRemaining(drop.expiresAt)}</span>
+                </div>
+              </div>
+
+              {previewLoading && (
+                <div className="flex justify-center gap-1.5 py-8">
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="w-2 h-2 rounded-full bg-neutral-500 animate-pulse"
+                      style={{ animationDelay: `${i * 150}ms` }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {previewUrl && previewType === 'image' && (
+                <motion.img
+                  src={previewUrl}
+                  alt={drop.fileName ?? 'Preview'}
+                  className="w-full rounded-lg border border-neutral-800"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.4 }}
+                />
+              )}
+
+              {previewUrl && previewType === 'video' && (
+                <motion.video
+                  src={previewUrl}
+                  controls
+                  className="w-full rounded-lg border border-neutral-800"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.4 }}
+                >
+                  <track kind="captions" />
+                </motion.video>
+              )}
+
+              {previewUrl && previewType === 'audio' && (
+                <audio src={previewUrl} controls className="w-full">
+                  <track kind="captions" />
+                </audio>
+              )}
+
+              {drop.encrypted && !keyString ? (
+                <p className="text-red-400 text-sm text-center">
+                  Decryption key is missing from the URL
+                </p>
+              ) : drop.encrypted ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    copy(drop.encrypted ? (decryptedContent ?? '') : (drop.content ?? ''))
-                  }
-                  className="w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors"
+                  onClick={handleEncryptedDownload}
+                  disabled={downloading}
+                  className="w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 active:scale-[0.98] transition-all disabled:opacity-40"
                 >
-                  {copied ? 'Copied!' : 'Copy content'}
+                  {downloading ? 'Decrypting...' : 'Decrypt & Download'}
                 </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {drop && drop.type === 'link' && (
-          <div className="space-y-6">
-            <div className="text-center space-y-2">
-              {drop.metadata?.title && (
-                <h2 className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</h2>
+              ) : (
+                <a
+                  href={getFileUrl(id)}
+                  download
+                  className="block w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 active:scale-[0.98] transition-all text-center"
+                >
+                  Download
+                </a>
               )}
-              <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
-                <span>Shared link</span>
-                <span>expires in {timeRemaining(drop.expiresAt)}</span>
+            </motion.div>
+          )}
+
+          {drop && drop.type === 'text' && (
+            <motion.div key="text" {...fadeIn} className="space-y-6">
+              <div className="text-center space-y-2">
+                {drop.metadata?.title && (
+                  <h2 className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</h2>
+                )}
+                <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
+                  {drop.encrypted && <span className="text-amber-400/80">Encrypted</span>}
+                  <span>{drop.metadata?.language ?? 'Text snippet'}</span>
+                  <span>expires in {timeRemaining(drop.expiresAt)}</span>
+                </div>
               </div>
-            </div>
 
-            <a
-              href={drop.content ?? '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-blue-400 hover:text-blue-300 text-sm break-all transition-colors"
-            >
-              {drop.content}
-            </a>
+              {drop.encrypted && !keyString ? (
+                <p className="text-red-400 text-sm text-center">
+                  Decryption key is missing from the URL
+                </p>
+              ) : (
+                <>
+                  <CodeEditor
+                    value={drop.encrypted ? (decryptedContent ?? '') : (drop.content ?? '')}
+                    readOnly
+                    maxHeight="600px"
+                    {...(drop.metadata?.language != null
+                      ? { language: drop.metadata.language }
+                      : {})}
+                  />
 
-            <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copy(drop.encrypted ? (decryptedContent ?? '') : (drop.content ?? ''))
+                    }
+                    className="w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 active:scale-[0.98] transition-all"
+                  >
+                    Copy content
+                  </button>
+                </>
+              )}
+            </motion.div>
+          )}
+
+          {drop && drop.type === 'link' && (
+            <motion.div key="link" {...fadeIn} className="space-y-6">
+              <div className="text-center space-y-2">
+                {drop.metadata?.title && (
+                  <h2 className="text-neutral-200 font-medium text-lg">{drop.metadata.title}</h2>
+                )}
+                <div className="flex items-center justify-center gap-3 text-neutral-500 text-sm">
+                  <span>Shared link</span>
+                  <span>expires in {timeRemaining(drop.expiresAt)}</span>
+                </div>
+              </div>
+
               <a
                 href={drop.content ?? '#'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 transition-colors text-center"
+                className="block bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-blue-400 hover:text-blue-300 text-sm break-all transition-colors"
               >
-                Open link
+                {drop.content}
               </a>
-              <button
-                type="button"
-                onClick={() => copy(drop.content ?? '')}
-                className="flex-1 py-2.5 border border-neutral-700 text-neutral-200 rounded-lg font-medium hover:bg-neutral-800 transition-colors"
-              >
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-          </div>
-        )}
+
+              <div className="flex gap-3">
+                <a
+                  href={drop.content ?? '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 active:scale-[0.98] transition-all text-center"
+                >
+                  Open link
+                </a>
+                <button
+                  type="button"
+                  onClick={() => copy(drop.content ?? '')}
+                  className="flex-1 py-2.5 border border-neutral-700 text-neutral-200 rounded-lg font-medium hover:bg-neutral-800 active:scale-[0.98] transition-all"
+                >
+                  Copy
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </main>
   );

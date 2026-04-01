@@ -70,8 +70,14 @@ Storage is abstracted behind a `StorageService` (Effect Layer). Two implementati
 | **React**                     | 19.x    | UI (familiarity choice — the goal is to learn Effect, not a new frontend framework) |
 | **Vite**                      | 6.x     | Build tool                                                                          |
 | **Tailwind CSS**              | 4.x     | Utility-first styling                                                               |
-| **CodeMirror 6**              | 4.25.9  | Code editor (via `@uiw/react-codemirror`) with Tokyo Night theme                   |
+| **CodeMirror 6**              | 4.25.9  | Code editor (via `@uiw/react-codemirror`) with custom dark theme (tokyo-night syntax, #0a0a0a bg) |
+| **@uiw/codemirror-themes**    | 4.25.9  | `createTheme()` API for custom CodeMirror themes                                   |
+| **@lezer/highlight**          | 1.2.1   | Syntax highlighting tag system (used by custom theme)                               |
 | **@codemirror/language-data** | 6.5.2   | Lazy-loaded language grammars for syntax highlighting                               |
+| **TanStack Query**            | 5.x     | Data fetching (`useQuery` for drops, `useMutation` for uploads, `staleTime: Infinity` for immutable drops) |
+| **Motion**                    | 12.x    | Micro-animations (fade transitions, spring pill selector, animated checkmark)       |
+| **Sonner**                    | 2.x     | Toast notifications (copy feedback)                                                 |
+| **Base UI**                   | 1.0.0-rc| Headless accessible components (Select for language picker)                         |
 | **mime**                      | 4.x     | IANA MIME type database — maps file extensions to MIME types for encrypted file previews |
 
 ### AI
@@ -176,16 +182,23 @@ dropthing/
 │       └── src/
 │           ├── App.tsx         # URL-based routing (/ → UploadPage, /drops/:id → DropPage)
 │           ├── lib/
-│           │   ├── api.ts      # API client (createDrop, getDrop, getFileUrl, isUrl, helpers)
-│           │   ├── crypto.ts   # E2EE: AES-256-GCM encrypt/decrypt, key import/export, packFile/unpackFile, base64 helpers
-│           │   ├── preview.ts  # File preview helpers: getPreviewType, mimeFromExtension (via mime lib)
+│           │   ├── api.ts           # API client (createDrop, getDrop, getFileUrl, isUrl, helpers)
+│           │   ├── crypto.ts        # E2EE: AES-256-GCM encrypt/decrypt, key import/export, packFile/unpackFile, base64 helpers
+│           │   ├── preview.ts       # File preview helpers: getPreviewType, mimeFromExtension (via mime lib)
+│           │   ├── query-client.ts  # TanStack Query client (staleTime: Infinity for immutable drops)
+│           │   ├── editor-theme.ts  # Custom CodeMirror theme (tokyo-night syntax, #0a0a0a background)
 │           │   └── __tests__/
 │           │       └── crypto.test.ts  # Crypto round-trip, IV uniqueness, wrong key, tampered, pack/unpack
+│           ├── hooks/
+│           │   ├── useCopyFeedback.ts  # Clipboard write + sonner toast
+│           │   ├── useDrop.ts          # useQuery: fetch drop + decrypt text
+│           │   ├── useFilePreview.ts   # useQuery: file preview (decrypt + blob URL)
+│           │   └── useUploadDrop.ts    # useMutation: upload with encryption
 │           ├── components/
-│           │   └── code-editor.tsx  # CodeMirror 6 wrapper (Tokyo Night, lazy language loading)
+│           │   └── code-editor.tsx  # CodeMirror 6 wrapper (custom theme, language picker overlay)
 │           └── pages/
-│               ├── UploadPage.tsx   # File drop zone + CodeMirror editor + TTL selector
-│               └── DropPage.tsx     # View/download page (file, text, link)
+│               ├── UploadPage.tsx   # Upload form (mode selector, drop zone, TTL pills, encryption toggle)
+│               └── DropPage.tsx     # View/download page (file preview, text viewer, link display)
 ├── packages/
 │   └── shared/                 # Effect schemas, types, errors, constants
 │       ├── tsconfig.json       # Extends root, composite: true
@@ -273,13 +286,14 @@ Simple URL-based routing in `App.tsx` (no react-router):
 
 ### UploadPage
 
-- **2 tabs**: File | Text
-- **File tab**: drag & drop zone with `<button>` element (a11y), file picker fallback
-- **Text tab**: CodeMirror 6 editor (Tokyo Night theme) + language selector dropdown
+- **Mode selector**: File | Text — sliding pill indicator with motion `translateX` animation (150ms tween)
+- **File tab**: drag & drop zone with `<button>` element (a11y), file picker fallback, ring effect on drag
+- **Text tab**: CodeMirror 6 editor with integrated language picker (Base UI Select, bottom-right overlay)
 - **Auto-detect URL**: if text content is a single valid HTTP(S) URL → sent as `type: 'link'` transparently, with "Link detected" indicator
-- **TTL selector**: 5 min / 1 hour / 1 day / 7 days
-- **Encryption toggle**: opt-in E2EE for any drop type (including links)
-- **After upload**: shows share link (with key fragment if encrypted) + copy-to-clipboard + "Drop another" reset
+- **TTL selector**: pill buttons (5 min / 1 hour / 1 day / 7 days)
+- **Encryption toggle**: custom toggle with lock icon animation, opt-in E2EE for any drop type (hidden when URL detected)
+- **After upload**: animated checkmark (spring + SVG pathLength), share link with copy-to-clipboard (sonner toast), "Drop another" reset
+- **State management**: 7 `useState` (form inputs) + `useUploadDrop` (mutation) + `useCopyFeedback` (clipboard)
 
 ### DropPage
 
@@ -289,13 +303,23 @@ Simple URL-based routing in `App.tsx` (no react-router):
 - **Link drops**: AI title as heading, clickable URL, open + copy buttons (`max-w-md`)
 - **Encrypted drops**: decryption key extracted from URL fragment (`#`), content decrypted client-side. Missing key shows error. File download triggers fetch → decrypt → Blob download.
 - **Error states**: 404 / 410 / generic error / missing decryption key, with back-to-home link
+- **Animations**: `AnimatePresence mode="wait"` for loading → error → content transitions, `fadeIn` variant with easeOut
+- **State management**: 1 `useState` (downloading) + `useDrop` (query + decrypt) + `useFilePreview` (preview + blob) + `useCopyFeedback` (clipboard)
+
+### Custom hooks (`src/hooks/`)
+
+- **`useCopyFeedback`** — clipboard write + sonner toast notification
+- **`useDrop(id, keyString)`** — `useQuery` for drop fetch + text decryption, error mapping
+- **`useFilePreview(drop, id, keyString)`** — `useQuery` for file preview (encrypted: decrypt → blob URL, non-encrypted: direct URL), MIME inference, blob cleanup on unmount
+- **`useUploadDrop`** — `useMutation` for upload (encryption + API call), returns `{ drop, keyFragment }`, `reset()` for form clear
 
 ### CodeEditor component
 
 Shared wrapper around `@uiw/react-codemirror`:
-- Tokyo Night theme
+- Custom dark theme (tokyo-night syntax colors, `#0a0a0a` background matching app's `neutral-950`)
 - Lazy-loaded language grammars via `@codemirror/language-data`
-- Configurable: `readOnly`, `language`, `placeholder`, `minHeight`, `maxHeight`
+- Integrated language picker (Base UI Select, bottom-right overlay) — shown when `onLanguageChange` prop provided
+- Configurable: `readOnly`, `language`, `onLanguageChange`, `placeholder`, `minHeight`, `maxHeight`
 - Handles `exactOptionalPropertyTypes` via conditional spread
 
 ---

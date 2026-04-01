@@ -85,14 +85,18 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 
 **Goal**: Functional upload & view pages with code editor.
 
-- [x] Upload form: file drop zone (drag & drop), CodeMirror 6 text editor, TTL selector
-- [x] 2 tabs: File | Text (link auto-detected from text content)
-- [x] CodeMirror 6 with Tokyo Night theme, language selector, lazy-loaded grammars
+- [x] Upload form: file drop zone (drag & drop), CodeMirror 6 text editor, TTL pill selector
+- [x] Mode selector: File | Text with sliding pill animation (motion translateX)
+- [x] CodeMirror 6 with custom dark theme (#0a0a0a bg), integrated language picker (Base UI Select overlay), lazy-loaded grammars
 - [x] Auto-detect URLs in text content → sent as `type: 'link'` transparently
-- [x] Display share link after successful upload + copy-to-clipboard
+- [x] Display share link after successful upload + copy-to-clipboard (sonner toast)
 - [x] Drop view page: CodeMirror read-only for text, download button for files, clickable link for URLs
 - [x] Simple URL-based routing (no react-router — 2 pages only)
 - [x] Responsive container: `max-w-md` for file/link drops, `max-w-2xl` for text drops
+- [x] Custom hooks: `useDrop`, `useFilePreview`, `useUploadDrop`, `useCopyFeedback` — reduced useState/useEffect sprawl
+- [x] TanStack Query for data fetching (`useQuery` + `useMutation`, `staleTime: Infinity`)
+- [x] Motion animations: fade transitions, animated checkmark, spring interactions
+- [x] Sonner toasts for copy feedback
 
 ---
 
@@ -164,6 +168,7 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 Pick from:
 
 - [x] File preview (images, videos, audio) — works with E2EE via decrypted Blob URLs
+- [x] UI/UX polish: motion animations, Base UI components, custom CodeMirror theme, sonner toasts
 - [ ] Password-protected shares
 - [ ] Download count limit
 - [ ] On-the-fly image compression

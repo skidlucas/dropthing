@@ -1,6 +1,7 @@
 import { useState, useRef, type DragEvent } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { TTL_OPTIONS, formatSize, isUrl } from '@/lib/api';
+import { MAX_FILE_SIZE } from '@dropthing/shared';
 import { useUploadDrop } from '@/hooks/useUploadDrop';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { CodeEditor } from '@/components/code-editor';
@@ -194,6 +195,7 @@ export function UploadPage() {
                       </svg>
                       <p className="text-neutral-400">Drop a file here</p>
                       <p className="text-neutral-600 text-sm">or click to browse</p>
+                      <p className="text-neutral-700 text-xs">max {formatSize(MAX_FILE_SIZE)}</p>
                     </div>
                   )}
                 </button>

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { Effect, Layer, Schema, ServiceMap } from 'effect';
+import { Effect, Layer, Schema, ServiceMap, Stream } from 'effect';
 import type { Drop } from '@dropthing/shared';
 import {
   DropExpiredError,
@@ -67,6 +67,17 @@ type DropServiceShape = {
     | DatabaseError
     | Schema.SchemaError
   >;
+  readonly getFileStream: (
+    id: string
+  ) => Effect.Effect<
+    { drop: Drop; stream: Stream.Stream<Uint8Array, StorageError> },
+    | DropNotFoundError
+    | DropExpiredError
+    | InvalidInputError
+    | StorageError
+    | DatabaseError
+    | Schema.SchemaError
+  >;
   readonly delete: (
     id: string
   ) => Effect.Effect<void, DropNotFoundError | StorageError | DatabaseError | Schema.SchemaError>;
@@ -90,7 +101,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
 
           if (file.size > MAX_FILE_SIZE) {
             return yield* new FileTooLargeError({
-              message: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
+              message: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024 / 1024}GB limit`,
               maxSize: MAX_FILE_SIZE,
               actualSize: file.size,
             });
@@ -164,6 +175,17 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
         return { drop, content };
       });
 
+      const getFileStream = Effect.fn('DropService.getFileStream')(function* (id: string) {
+        const drop = yield* get(id);
+
+        if (drop.type !== 'file' || !drop.storageKey) {
+          return yield* new InvalidInputError({ message: 'Drop is not a file' });
+        }
+
+        const stream = yield* storage.getStream(drop.storageKey);
+        return { drop, stream };
+      });
+
       const del = Effect.fn('DropService.delete')(function* (id: string) {
         const drop = yield* repo.findById(id);
         if (!drop) {
@@ -175,7 +197,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
         yield* repo.deleteById(id);
       });
 
-      return { create, get, getFile, delete: del };
+      return { create, get, getFile, getFileStream, delete: del };
     })
   );
 }

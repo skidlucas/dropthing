@@ -1,5 +1,5 @@
 import { mkdir, unlink } from 'node:fs/promises';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Stream } from 'effect';
 import { StorageService } from './storage.service';
 import { StorageError } from '@dropthing/shared';
 
@@ -31,6 +31,26 @@ export const LocalStorageLayer = Layer.effect(
       });
     });
 
+    const getStream = Effect.fn('StorageService.getStream')(function* (key: string) {
+      const file = Bun.file(`${UPLOADS_DIR}/${key}`);
+
+      const exists = yield* Effect.tryPromise({
+        try: () => file.exists(),
+        catch: (error) => new StorageError({ message: 'Failed to check file', error }),
+      });
+      if (!exists) {
+        return yield* new StorageError({
+          message: `File not found: ${key}`,
+          error: new Error('ENOENT'),
+        });
+      }
+
+      return Stream.fromReadableStream({
+        evaluate: () => file.stream(),
+        onError: (error) => new StorageError({ message: 'Stream read failed', error }),
+      });
+    });
+
     const del = Effect.fn('StorageService.delete')(function* (key: string) {
       yield* Effect.tryPromise({
         try: () => unlink(`${UPLOADS_DIR}/${key}`),
@@ -38,6 +58,6 @@ export const LocalStorageLayer = Layer.effect(
       });
     });
 
-    return { save, get, delete: del };
+    return { save, get, getStream, delete: del };
   })
 );

@@ -1,5 +1,5 @@
 import { S3Client } from 'bun';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Stream } from 'effect';
 import { StorageService } from './storage.service.js';
 import { StorageError } from '@dropthing/shared';
 
@@ -31,6 +31,26 @@ export const R2StorageLayer = Layer.effect(
       });
     });
 
+    const getStream = Effect.fn('StorageService.getStream')(function* (key: string) {
+      const s3File = s3Client.file(key);
+
+      const exists = yield* Effect.tryPromise({
+        try: () => s3File.exists(),
+        catch: (error) => new StorageError({ message: 'Failed to check S3 file', error }),
+      });
+      if (!exists) {
+        return yield* new StorageError({
+          message: `S3 file not found: ${key}`,
+          error: new Error('NOT_FOUND'),
+        });
+      }
+
+      return Stream.fromReadableStream({
+        evaluate: () => s3File.stream(),
+        onError: (error) => new StorageError({ message: 'S3 stream read failed', error }),
+      });
+    });
+
     const del = Effect.fn('StorageService.delete')(function* (key: string) {
       yield* Effect.tryPromise({
         try: () => s3Client.delete(key),
@@ -38,6 +58,6 @@ export const R2StorageLayer = Layer.effect(
       });
     });
 
-    return { save, get, delete: del };
+    return { save, get, getStream, delete: del };
   })
 );

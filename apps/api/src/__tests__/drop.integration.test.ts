@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from '@effect/vitest';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Stream } from 'effect';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { eq } from 'drizzle-orm';
 import { dropsTable } from '../db/schema.js';
@@ -22,6 +22,7 @@ const MockAiService = Layer.succeed(AiService, {
 const MockStorageService = Layer.succeed(StorageService, {
   save: (_key, _data) => Effect.void,
   get: (_key) => Effect.succeed(new Uint8Array()),
+  getStream: (_key) => Effect.succeed(Stream.fromIterable([new Uint8Array([1, 2, 3])])),
   delete: (_key) => Effect.void,
 });
 

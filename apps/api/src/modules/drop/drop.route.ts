@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { Effect, Schema } from 'effect';
+import { Effect, Schema, Stream } from 'effect';
 import type { ManagedRuntime } from 'effect';
 import { DropService, type CreateDropInput } from './drop.service.js';
 import { InvalidInputError, UUID, UploadParams } from '@dropthing/shared';
@@ -90,14 +90,14 @@ export default function dropRoutes(runtime: AppRuntime) {
         );
 
         const dropService = yield* DropService;
-        const { drop, content } = yield* dropService.getFile(id);
+        const { drop, stream } = yield* dropService.getFileStream(id);
 
-        return new Response(Buffer.from(content), {
+        return new Response(Stream.toReadableStream(stream), {
           status: 200,
           headers: {
             'Content-Type': drop.mimeType ?? 'application/octet-stream',
             'Content-Disposition': `attachment; filename="${drop.fileName}"`,
-            'Content-Length': content.length.toString(),
+            ...(drop.size != null ? { 'Content-Length': drop.size.toString() } : {}),
           },
         });
       })

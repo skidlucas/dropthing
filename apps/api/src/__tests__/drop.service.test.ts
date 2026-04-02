@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Stream } from 'effect';
 import { DropService } from '../modules/drop/drop.service.js';
 import { DropRepository, type InsertDropInput } from '../modules/drop/drop.repository.js';
 import { StorageService } from '../modules/storage/storage.service.js';
@@ -19,6 +19,7 @@ function makeMocks() {
   const MockStorageService = Layer.succeed(StorageService, {
     save: (_key, _data) => Effect.void,
     get: (_key) => Effect.succeed(new Uint8Array()),
+    getStream: (_key) => Effect.succeed(Stream.fromIterable([new Uint8Array([1, 2, 3])])),
     delete: (_key) => Effect.void,
   });
 

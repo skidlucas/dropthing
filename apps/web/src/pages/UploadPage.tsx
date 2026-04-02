@@ -15,7 +15,7 @@ const fadeIn = {
 };
 
 export function UploadPage() {
-  const [mode, setMode] = useState<UploadMode>('text');
+  const [mode, setMode] = useState<UploadMode>('file');
   const [ttl, setTtl] = useState(3600);
   const [file, setFile] = useState<File | null>(null);
   const [content, setContent] = useState('');

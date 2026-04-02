@@ -14,7 +14,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          codemirror: ['@uiw/react-codemirror', '@codemirror/language-data'],
+          codemirror: ['@uiw/react-codemirror'],
           motion: ['motion/react'],
         },
       },

@@ -3,6 +3,7 @@ import { dropTheme } from '@/lib/editor-theme';
 import { languages } from '@codemirror/language-data';
 import { useState, useEffect } from 'react';
 import { Select } from '@base-ui-components/react/select';
+import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 
 interface CodeEditorProps {
@@ -43,6 +44,12 @@ export function CodeEditor({
     }
   }, [language]);
 
+  const ariaLabel = EditorView.contentAttributes.of({
+    'aria-label': readOnly ? 'Code preview' : 'Code editor',
+  });
+
+  const extensions = [ariaLabel, ...(langExtension ? [langExtension] : [])];
+
   const optionalProps = {
     ...(onChange != null ? { onChange } : {}),
     ...(placeholder != null ? { placeholder } : {}),
@@ -54,7 +61,7 @@ export function CodeEditor({
       <CodeMirror
         value={value}
         theme={dropTheme}
-        extensions={langExtension ? [langExtension] : []}
+        extensions={extensions}
         readOnly={readOnly}
         editable={!readOnly}
         minHeight={minHeight}
@@ -64,7 +71,6 @@ export function CodeEditor({
           highlightActiveLine: !readOnly,
         }}
         className="rounded-lg overflow-hidden border border-neutral-700 text-sm"
-        aria-label={readOnly ? 'Code preview' : 'Code editor'}
         {...optionalProps}
       />
       {onLanguageChange && (

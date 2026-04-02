@@ -10,6 +10,16 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          codemirror: ['@uiw/react-codemirror', '@codemirror/language-data'],
+          motion: ['motion/react'],
+        },
+      },
+    },
+  },
   server: {
     port: 5179,
     proxy: {

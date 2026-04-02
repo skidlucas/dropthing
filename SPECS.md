@@ -60,33 +60,34 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 | **Bun S3Client**  | Built-in S3-compatible client in Bun (no `@aws-sdk/client-s3` needed)                 |
 
 Storage is abstracted behind a `StorageService` (Effect Layer). Two implementations available:
+
 - `LocalStorageLayer` — filesystem (`./uploads/`), used in dev (`USE_R2=false`)
 - `R2StorageLayer` — Cloudflare R2 via Bun's `S3Client`, used in prod (default)
 
 ### Frontend
 
-| Tool                          | Version | Role                                                                                |
-| ----------------------------- | ------- | ----------------------------------------------------------------------------------- |
-| **React**                     | 19.x    | UI (familiarity choice — the goal is to learn Effect, not a new frontend framework) |
-| **Vite**                      | 6.x     | Build tool                                                                          |
-| **Tailwind CSS**              | 4.x     | Utility-first styling                                                               |
-| **CodeMirror 6**              | 4.25.9  | Code editor (via `@uiw/react-codemirror`) with custom dark theme (tokyo-night syntax, #0a0a0a bg) |
-| **@uiw/codemirror-themes**    | 4.25.9  | `createTheme()` API for custom CodeMirror themes                                   |
-| **@lezer/highlight**          | 1.2.1   | Syntax highlighting tag system (used by custom theme)                               |
-| **@codemirror/language-data** | 6.5.2   | Lazy-loaded language grammars for syntax highlighting                               |
-| **TanStack Query**            | 5.x     | Data fetching (`useQuery` for drops, `useMutation` for uploads, `staleTime: Infinity` for immutable drops) |
-| **Motion**                    | 12.x    | Micro-animations (fade transitions, spring pill selector, animated checkmark)       |
-| **Sonner**                    | 2.x     | Toast notifications (copy feedback)                                                 |
-| **Base UI**                   | 1.0.0-rc| Headless accessible components (Select for language picker)                         |
-| **mime**                      | 4.x     | IANA MIME type database — maps file extensions to MIME types for encrypted file previews |
+| Tool                          | Version  | Role                                                                                                       |
+| ----------------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| **React**                     | 19.x     | UI (familiarity choice — the goal is to learn Effect, not a new frontend framework)                        |
+| **Vite**                      | 6.x      | Build tool                                                                                                 |
+| **Tailwind CSS**              | 4.x      | Utility-first styling                                                                                      |
+| **CodeMirror 6**              | 4.25.9   | Code editor (via `@uiw/react-codemirror`) with custom dark theme (tokyo-night syntax, #0a0a0a bg)          |
+| **@uiw/codemirror-themes**    | 4.25.9   | `createTheme()` API for custom CodeMirror themes                                                           |
+| **@lezer/highlight**          | 1.2.1    | Syntax highlighting tag system (used by custom theme)                                                      |
+| **@codemirror/language-data** | 6.5.2    | Lazy-loaded language grammars for syntax highlighting                                                      |
+| **TanStack Query**            | 5.x      | Data fetching (`useQuery` for drops, `useMutation` for uploads, `staleTime: Infinity` for immutable drops) |
+| **Motion**                    | 12.x     | Micro-animations (fade transitions, spring pill selector, animated checkmark)                              |
+| **Sonner**                    | 2.x      | Toast notifications (copy feedback)                                                                        |
+| **Base UI**                   | 1.0.0-rc | Headless accessible components (Select for language picker)                                                |
+| **mime**                      | 4.x      | IANA MIME type database — maps file extensions to MIME types for encrypted file previews                   |
 
 ### AI
 
-| Tool              | Version | Role                                                            |
-| ----------------- | ------- | --------------------------------------------------------------- |
-| **Groq**          |         | Fast LLM inference (LPU) — language detection + title generation |
-| **@ai-sdk/groq**  | latest  | Vercel AI SDK Groq provider                                     |
-| **ai**            | 6.x     | Vercel AI SDK — `generateText` for LLM calls                   |
+| Tool             | Version | Role                                                             |
+| ---------------- | ------- | ---------------------------------------------------------------- |
+| **Groq**         |         | Fast LLM inference (LPU) — language detection + title generation |
+| **@ai-sdk/groq** | latest  | Vercel AI SDK Groq provider                                      |
+| **ai**           | 6.x     | Vercel AI SDK — `generateText` for LLM calls                     |
 
 ### Linting & formatting
 
@@ -101,10 +102,10 @@ Pre-commit hook runs `oxlint --fix` + `oxfmt --write` on staged files via lint-s
 
 ### Testing
 
-| Tool              | Version          | Role                                                          |
-| ----------------- | ---------------- | ------------------------------------------------------------- |
-| **vitest**        | 4.x              | Test runner (unified for all tests)                           |
-| **@effect/vitest**| 4.0.0-beta.43    | Effect-native test helpers: `it.effect()`, `it.live()`, Layer injection |
+| Tool               | Version       | Role                                                                    |
+| ------------------ | ------------- | ----------------------------------------------------------------------- |
+| **vitest**         | 4.x           | Test runner (unified for all tests)                                     |
+| **@effect/vitest** | 4.0.0-beta.43 | Effect-native test helpers: `it.effect()`, `it.live()`, Layer injection |
 
 ### Monorepo
 
@@ -225,6 +226,7 @@ AiService (infra)       → Groq API for metadata generation (language, title)
 ```
 
 Layer composition in `index.ts`:
+
 ```
 DrizzleService → DropRepository ─┐
 StorageLayer ───────────────────┼→ DropService
@@ -281,6 +283,7 @@ AiService ──────────────────────┘
 ### Routing
 
 Simple URL-based routing in `App.tsx` (no react-router):
+
 - `/` → `UploadPage`
 - `/drops/:id` → `DropPage`
 
@@ -316,6 +319,7 @@ Simple URL-based routing in `App.tsx` (no react-router):
 ### CodeEditor component
 
 Shared wrapper around `@uiw/react-codemirror`:
+
 - Custom dark theme (tokyo-night syntax colors, `#0a0a0a` background matching app's `neutral-950`)
 - Lazy-loaded language grammars via `@codemirror/language-data`
 - Integrated language picker (Base UI Select, bottom-right overlay) — shown when `onLanguageChange` prop provided
@@ -328,19 +332,19 @@ Shared wrapper around `@uiw/react-codemirror`:
 
 ### drops table
 
-| Column      | Type            | Notes                                          |
-| ----------- | --------------- | ---------------------------------------------- |
-| `id`        | UUID PK         | `gen_random_uuid()`                            |
-| `type`      | VARCHAR         | `'file' \| 'text' \| 'link'`, default `'text'` |
-| `content`   | TEXT nullable   | Text/link content                              |
-| `fileName`  | VARCHAR nullable| Original file name                             |
-| `mimeType`  | VARCHAR nullable| MIME type for files                            |
-| `size`      | INTEGER nullable| File size in bytes                             |
-| `storageKey`| VARCHAR nullable| R2/local path (`YYYY/MM/DD/uuid.ext`)          |
-| `metadata`  | JSONB nullable  | AI-generated: `{ language?, title }` |
-| `encrypted` | BOOLEAN         | `false` default, true = client-side E2EE       |
-| `createdAt` | TIMESTAMP       | `now()`                                        |
-| `expiresAt` | TIMESTAMP       | `createdAt + TTL`                              |
+| Column       | Type             | Notes                                          |
+| ------------ | ---------------- | ---------------------------------------------- |
+| `id`         | UUID PK          | `gen_random_uuid()`                            |
+| `type`       | VARCHAR          | `'file' \| 'text' \| 'link'`, default `'text'` |
+| `content`    | TEXT nullable    | Text/link content                              |
+| `fileName`   | VARCHAR nullable | Original file name                             |
+| `mimeType`   | VARCHAR nullable | MIME type for files                            |
+| `size`       | INTEGER nullable | File size in bytes                             |
+| `storageKey` | VARCHAR nullable | R2/local path (`YYYY/MM/DD/uuid.ext`)          |
+| `metadata`   | JSONB nullable   | AI-generated: `{ language?, title }`           |
+| `encrypted`  | BOOLEAN          | `false` default, true = client-side E2EE       |
+| `createdAt`  | TIMESTAMP        | `now()`                                        |
+| `expiresAt`  | TIMESTAMP        | `createdAt + TTL`                              |
 
 ### metadata JSONB
 
@@ -364,11 +368,11 @@ Polymorphic per drop type, no fixed schema enforced at DB level (validated by Ef
 
 ## Drop types
 
-| Type   | Required fields     | Validation                          | Storage              |
-| ------ | ------------------- | ----------------------------------- | -------------------- |
-| `file` | `file` (File)       | Size ≤ 100 MB                       | StorageService (R2 or local) |
-| `text` | `content` (string)  | Non-empty                           | DB `content` column  |
-| `link` | `content` (string)  | Valid URL (skipped when encrypted)   | DB `content` column  |
+| Type   | Required fields    | Validation                         | Storage                      |
+| ------ | ------------------ | ---------------------------------- | ---------------------------- |
+| `file` | `file` (File)      | Size ≤ 100 MB                      | StorageService (R2 or local) |
+| `text` | `content` (string) | Non-empty                          | DB `content` column          |
+| `link` | `content` (string) | Valid URL (skipped when encrypted) | DB `content` column          |
 
 Default type: `text`. Link type is auto-detected from text content on the frontend.
 
@@ -393,16 +397,16 @@ class FileTooLargeError extends Schema.TaggedErrorClass("FileTooLargeError")(
 
 Routes use `withBasicErrorHandling` helper that pipes errors through `catchTags`:
 
-| Error              | HTTP Status |
-| ------------------ | ----------- |
-| `InvalidInputError`| 400         |
-| `FileTooLargeError`| 413         |
-| `DropNotFoundError`| 404         |
+| Error               | HTTP Status |
+| ------------------- | ----------- |
+| `InvalidInputError` | 400         |
+| `FileTooLargeError` | 413         |
+| `DropNotFoundError` | 404         |
 | `DropExpiredError`  | 410         |
-| `SchemaError`      | 500         |
-| `DatabaseError`    | 500         |
-| `StorageError`     | 500         |
-| fallback           | 500         |
+| `SchemaError`       | 500         |
+| `DatabaseError`     | 500         |
+| `StorageError`      | 500         |
+| fallback            | 500         |
 
 Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect.mapError` to transform `SchemaError` into `InvalidInputError`.
 

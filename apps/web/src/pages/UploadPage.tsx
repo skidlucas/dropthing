@@ -223,7 +223,7 @@ export function UploadPage() {
 
             {/* TTL selector — pills */}
             <div className="space-y-2">
-              <span className="text-neutral-500 text-sm">Expires in</span>
+              <span className="text-neutral-400 text-sm">Expires in</span>
               <div className="flex gap-2">
                 {TTL_OPTIONS.map((opt) => (
                   <button
@@ -318,7 +318,7 @@ function Layout({ children }: { children: React.ReactNode }) {
               dropthing
             </a>
           </h1>
-          <p className="text-neutral-500 text-sm">drop and share your stuff</p>
+          <p className="text-neutral-400 text-sm">drop and share your stuff</p>
         </header>
         {children}
       </div>

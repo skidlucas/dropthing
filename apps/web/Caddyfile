@@ -1,5 +1,10 @@
 :8080 {
 	root * /srv
+
+	# Content-hashed assets built by Vite — cache forever
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+
 	try_files {path} /index.html
 	file_server
 }

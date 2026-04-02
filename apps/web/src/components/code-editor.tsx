@@ -64,6 +64,7 @@ export function CodeEditor({
           highlightActiveLine: !readOnly,
         }}
         className="rounded-lg overflow-hidden border border-neutral-700 text-sm"
+        aria-label={readOnly ? 'Code preview' : 'Code editor'}
         {...optionalProps}
       />
       {onLanguageChange && (
@@ -72,7 +73,10 @@ export function CodeEditor({
             value={language ?? ''}
             onValueChange={(value) => onLanguageChange(value ?? '')}
           >
-            <Select.Trigger className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-neutral-500 hover:text-neutral-300 bg-neutral-800/80 backdrop-blur-sm border border-neutral-700/50 transition-colors cursor-pointer">
+            <Select.Trigger
+              aria-label="Select language"
+              className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-neutral-400 hover:text-neutral-300 bg-neutral-800/80 backdrop-blur-sm border border-neutral-700/50 transition-colors cursor-pointer"
+            >
               <Select.Value>{(value: string) => value || 'Plain Text'}</Select.Value>
               <Select.Icon className="text-neutral-600">
                 <svg

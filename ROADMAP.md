@@ -169,6 +169,9 @@ Pick from:
 
 - [x] File preview (images, videos, audio) — works with E2EE via decrypted Blob URLs
 - [x] UI/UX polish: motion animations, Base UI components, custom CodeMirror theme, sonner toasts
+- [x] Streaming downloads — `StorageService.getStream()` → `Stream<Uint8Array>` → `Stream.toReadableStream()` → HTTP Response. RAM serveur fixe (~chunk size) au lieu de buffer complet
+- [x] File size limit raised to 1 GB (`MAX_FILE_SIZE`)
 - [ ] Password-protected shares
 - [ ] Download count limit
 - [ ] On-the-fly image compression
+- [ ] Streaming uploads (bypass `formData()`, multipart parsing from raw stream — required if concurrent large uploads on constrained server)

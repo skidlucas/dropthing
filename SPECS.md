@@ -9,7 +9,7 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 ## Core features
 
 - **3 drop types**:
-  - **File**: photos, videos, any file type, max 100 MB
+  - **File**: photos, videos, any file type, max 1 GB
   - **Text**: code snippets, notes — CodeMirror 6 editor with syntax highlighting
   - **Link**: URL sharing — auto-detected from text content (no separate tab)
 - **Unique share link**: each drop generates a unique URL
@@ -247,17 +247,19 @@ AiService ──────────────────────┘
 
 - `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type and not encrypted), enrich with AI metadata (skipped when encrypted), compute expiresAt, delegate to repository
 - `get(id)` — find drop, yield `DropNotFoundError` if missing, yield `DropExpiredError` if expired
-- `getFile(id)` — calls `get`, validates it's a file drop, returns `{ drop, content }` from StorageService
+- `getFile(id)` — calls `get`, validates it's a file drop, returns `{ drop, content }` from StorageService (buffered)
+- `getFileStream(id)` — like `getFile` but returns `{ drop, stream: Stream<Uint8Array, StorageError> }` for streaming download
 - `delete(id)` — bypasses expiration (uses `repo.findById`), deletes storage file + DB record
 - `CreateDropInput`: discriminated union (`{ type: 'file'; file: File; encrypted? } | { type: 'text'; content: string; encrypted? } | { type: 'link'; content: string; encrypted? }`)
 
 ### StorageService
 
 - `save(key, data: Blob)` — save file to storage (key format: `YYYY/MM/DD/uuid.ext`)
-- `get(key)` — read file as `Uint8Array`
+- `get(key)` — read file as `Uint8Array` (buffered, kept for tests/internal use)
+- `getStream(key)` — returns `Effect<Stream<Uint8Array, StorageError>, StorageError>` — outer Effect validates existence, inner Stream emits chunks. Used for HTTP download responses.
 - `delete(key)` — delete file from storage
 - Interface only (no `static layer`) — implementations are separate files
-- Two implementations: `LocalStorageLayer` (filesystem), `R2StorageLayer` (Cloudflare R2 via Bun S3Client)
+- Two implementations: `LocalStorageLayer` (`Bun.file().stream()`), `R2StorageLayer` (`S3File.stream()`)
 
 ### AiService
 
@@ -370,7 +372,7 @@ Polymorphic per drop type, no fixed schema enforced at DB level (validated by Ef
 
 | Type   | Required fields    | Validation                         | Storage                      |
 | ------ | ------------------ | ---------------------------------- | ---------------------------- |
-| `file` | `file` (File)      | Size ≤ 100 MB                      | StorageService (R2 or local) |
+| `file` | `file` (File)      | Size ≤ 1 GB                        | StorageService (R2 or local) |
 | `text` | `content` (string) | Non-empty                          | DB `content` column          |
 | `link` | `content` (string) | Valid URL (skipped when encrypted) | DB `content` column          |
 

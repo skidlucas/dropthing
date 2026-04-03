@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Layer, ManagedRuntime } from 'effect';
+import { MAX_FILE_SIZE } from '@dropthing/shared';
 import { DropService } from './modules/drop/drop.service.js';
 import { DropRepository } from './modules/drop/drop.repository.js';
 import { DrizzleService } from './db/db.service.js';
@@ -45,4 +46,5 @@ app.route('/drops', dropRoutes(runtime));
 export default {
   port: 3001,
   fetch: app.fetch,
+  maxRequestBodySize: MAX_FILE_SIZE,
 };

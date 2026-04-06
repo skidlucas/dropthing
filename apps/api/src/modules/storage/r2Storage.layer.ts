@@ -30,14 +30,7 @@ export const R2StorageLayer = Layer.effect(
       _size: number
     ) {
       yield* Effect.tryPromise({
-        try: async () => {
-          const s3File = s3Client.file(key);
-          const writer = s3File.writer();
-          for await (const chunk of stream) {
-            await writer.write(chunk);
-          }
-          await writer.end();
-        },
+        try: () => s3Client.write(key, new Response(stream)),
         catch: (error) => new StorageError({ message: 'Failed to stream file to S3', error }),
       });
     });

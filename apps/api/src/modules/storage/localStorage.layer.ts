@@ -20,26 +20,12 @@ export const LocalStorageLayer = Layer.effect(
       });
     });
 
-    const saveStream = Effect.fn('StorageService.saveStream')(function* (
-      key: string,
-      stream: ReadableStream<Uint8Array>,
-      _size: number
-    ) {
-      const filePath = `${UPLOADS_DIR}/${key}`;
-      const dir = filePath.substring(0, filePath.lastIndexOf('/'));
-      yield* Effect.tryPromise({
-        try: () => mkdir(dir, { recursive: true }),
-        catch: (error) => new StorageError({ message: 'Failed to create directory', error }),
-      });
-      yield* Effect.tryPromise({
-        try: async () => {
-          const writer = Bun.file(filePath).writer();
-          for await (const chunk of stream) {
-            await writer.write(chunk);
-          }
-          await writer.end();
-        },
-        catch: (error) => new StorageError({ message: 'Failed to stream file to disk', error }),
+    const presign = (_key: string, _contentType: string) => Effect.succeed(null as string | null);
+
+    const exists = Effect.fn('StorageService.exists')(function* (key: string) {
+      return yield* Effect.tryPromise({
+        try: () => Bun.file(`${UPLOADS_DIR}/${key}`).exists(),
+        catch: (error) => new StorageError({ message: 'Failed to check file', error }),
       });
     });
 
@@ -57,11 +43,11 @@ export const LocalStorageLayer = Layer.effect(
     const getStream = Effect.fn('StorageService.getStream')(function* (key: string) {
       const file = Bun.file(`${UPLOADS_DIR}/${key}`);
 
-      const exists = yield* Effect.tryPromise({
+      const fileExists = yield* Effect.tryPromise({
         try: () => file.exists(),
         catch: (error) => new StorageError({ message: 'Failed to check file', error }),
       });
-      if (!exists) {
+      if (!fileExists) {
         return yield* new StorageError({
           message: `File not found: ${key}`,
           error: new Error('ENOENT'),
@@ -81,6 +67,6 @@ export const LocalStorageLayer = Layer.effect(
       });
     });
 
-    return { save, saveStream, get, getStream, delete: del };
+    return { save, presign, exists, get, getStream, delete: del };
   })
 );

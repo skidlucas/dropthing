@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import type { DropJson } from '@dropthing/shared';
-import { createDrop, uploadFile } from '@/lib/api';
+import { createDrop, presignUpload, uploadToPresigned, confirmUpload } from '@/lib/api';
 import {
   generateKey,
   exportKey,
@@ -38,22 +38,40 @@ async function performUpload(
   let keyFragment = '';
 
   if (mode === 'file' && file) {
-    let uploadFileData = file;
+    let uploadFile: File | Blob = file;
+    let fileName = file.name;
+    let mimeType = file.type || 'application/octet-stream';
 
     if (shouldEncrypt) {
       const key = await generateKey();
       keyFragment = await exportKey(key);
       const packed = packFile(file.name, await file.arrayBuffer());
       const ciphertext = await encrypt(key, packed);
-      uploadFileData = new File([ciphertext], 'encrypted.bin', {
-        type: 'application/octet-stream',
-      });
+      uploadFile = new Blob([ciphertext]);
+      fileName = 'encrypted.bin';
+      mimeType = 'application/octet-stream';
     }
 
-    const drop = await uploadFile(
-      { file: uploadFileData, expiresIn: ttl, encrypted: shouldEncrypt },
-      setProgress
-    );
+    // 1. Get presigned URL from API
+    const { uploadUrl, storageKey } = await presignUpload({
+      fileName,
+      mimeType,
+      size: uploadFile.size,
+      encrypted: shouldEncrypt,
+    });
+
+    // 2. Upload directly to R2
+    await uploadToPresigned(uploadUrl, uploadFile, mimeType, setProgress);
+
+    // 3. Confirm upload and create drop record
+    const drop = await confirmUpload({
+      storageKey,
+      fileName,
+      mimeType,
+      size: uploadFile.size,
+      expiresIn: ttl,
+      encrypted: shouldEncrypt,
+    });
 
     return { drop, keyFragment };
   }

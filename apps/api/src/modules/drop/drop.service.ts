@@ -14,7 +14,7 @@ import type { DatabaseError } from '../../db/db.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { AiService } from '../ai/ai.service.js';
 
-function generateStorageKey(fileName: string): string {
+export function generateStorageKey(fileName: string): string {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -43,11 +43,11 @@ export type CreateDropInput =
       readonly encrypted?: boolean;
     };
 
-export interface CreateFromStreamInput {
+export interface ConfirmUploadInput {
+  readonly storageKey: string;
   readonly fileName: string;
   readonly mimeType: string;
   readonly size: number;
-  readonly stream: ReadableStream<Uint8Array>;
   readonly expiresIn: number;
   readonly encrypted: boolean;
 }
@@ -59,9 +59,20 @@ type DropServiceShape = {
     Drop,
     InvalidInputError | FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError
   >;
-  readonly createFromStream: (
-    input: CreateFromStreamInput
-  ) => Effect.Effect<Drop, FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError>;
+  readonly presignUpload: (input: {
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }) => Effect.Effect<
+    { uploadUrl: string; storageKey: string },
+    InvalidInputError | FileTooLargeError | StorageError
+  >;
+  readonly confirmUpload: (
+    input: ConfirmUploadInput
+  ) => Effect.Effect<
+    Drop,
+    InvalidInputError | FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError
+  >;
   readonly get: (
     id: string
   ) => Effect.Effect<
@@ -163,8 +174,33 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
         });
       });
 
-      const createFromStream = Effect.fn('DropService.createFromStream')(function* (
-        input: CreateFromStreamInput
+      const presignUpload = Effect.fn('DropService.presignUpload')(function* (input: {
+        fileName: string;
+        mimeType: string;
+        size: number;
+      }) {
+        if (input.size > MAX_FILE_SIZE) {
+          return yield* new FileTooLargeError({
+            message: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024 / 1024}GB limit`,
+            maxSize: MAX_FILE_SIZE,
+            actualSize: input.size,
+          });
+        }
+
+        const storageKey = generateStorageKey(input.fileName);
+        const uploadUrl = yield* storage.presign(storageKey, input.mimeType);
+
+        if (!uploadUrl) {
+          return yield* new InvalidInputError({
+            message: 'Presigned uploads not available (local storage mode)',
+          });
+        }
+
+        return { uploadUrl, storageKey };
+      });
+
+      const confirmUpload = Effect.fn('DropService.confirmUpload')(function* (
+        input: ConfirmUploadInput
       ) {
         if (input.size > MAX_FILE_SIZE) {
           return yield* new FileTooLargeError({
@@ -174,17 +210,21 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
           });
         }
 
-        const expiresAt = new Date(Date.now() + input.expiresIn * 1000);
-        const storageKey = generateStorageKey(input.fileName);
+        const fileExists = yield* storage.exists(input.storageKey);
+        if (!fileExists) {
+          return yield* new InvalidInputError({
+            message: 'File not found in storage — upload may have failed',
+          });
+        }
 
-        yield* storage.saveStream(storageKey, input.stream, input.size);
+        const expiresAt = new Date(Date.now() + input.expiresIn * 1000);
 
         return yield* repo.insert({
           type: 'file',
           fileName: input.fileName,
           mimeType: input.mimeType,
           size: input.size,
-          storageKey,
+          storageKey: input.storageKey,
           metadata: null,
           encrypted: input.encrypted,
           expiresAt,
@@ -237,7 +277,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
         yield* repo.deleteById(id);
       });
 
-      return { create, createFromStream, get, getFile, getFileStream, delete: del };
+      return { create, presignUpload, confirmUpload, get, getFile, getFileStream, delete: del };
     })
   );
 }

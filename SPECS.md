@@ -161,7 +161,7 @@ dropthing/
 │   │       │   └── schema.ts     # Drizzle table definitions (dropsTable)
 │   │       └── modules/
 │   │           ├── drop/
-│   │           │   ├── drop.route.ts       # POST /drops, POST /drops/upload (streaming), GET /drops/:id, GET /drops/:id/file, DELETE /drops/:id
+│   │           │   ├── drop.route.ts       # POST /drops, POST /drops/presign, POST /drops/confirm, GET /drops/:id, GET /drops/:id/file, DELETE /drops/:id
 │   │           │   ├── drop.service.ts     # Business logic (validation, storage, URL check)
 │   │           │   └── drop.repository.ts  # Data access (insert, findById, findExpiredWithStorageKey, deleteById, clearStorageKey)
 │   │           ├── cleanup/
@@ -182,7 +182,7 @@ dropthing/
 │       └── src/
 │           ├── App.tsx         # URL-based routing (/ → UploadPage, /drops/:id → DropPage)
 │           ├── lib/
-│           │   ├── api.ts           # API client (createDrop, uploadFile with XHR progress, getDrop, getFileUrl, isUrl, helpers)
+│           │   ├── api.ts           # API client (createDrop, presignUpload, uploadToPresigned, confirmUpload, getDrop, getFileUrl, isUrl, helpers)
 │           │   ├── crypto.ts        # E2EE: AES-256-GCM encrypt/decrypt, key import/export, packFile/unpackFile, base64 helpers
 │           │   ├── preview.ts       # File preview helpers: getPreviewType, mimeFromExtension (via mime lib)
 │           │   ├── query-client.ts  # TanStack Query client (staleTime: Infinity for immutable drops)
@@ -245,7 +245,8 @@ AiService ──────────────────────┘
 ### DropService
 
 - `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type and not encrypted), enrich with AI metadata (skipped when encrypted), compute expiresAt, delegate to repository
-- `createFromStream(input)` — streaming variant for file uploads: validates size, streams file directly to storage via `saveStream()`, inserts DB record. No memory buffering. Used by `POST /drops/upload`.
+- `presignUpload(input)` — generates storageKey + presigned PUT URL for direct browser→R2 upload. Validates file size.
+- `confirmUpload(input)` — verifies file exists in R2 storage, creates drop DB record. Used after browser completes direct R2 upload.
 - `get(id)` — find drop, yield `DropNotFoundError` if missing, yield `DropExpiredError` if expired
 - `getFile(id)` — calls `get`, validates it's a file drop, returns `{ drop, content }` from StorageService (buffered)
 - `getFileStream(id)` — like `getFile` but returns `{ drop, stream: Stream<Uint8Array, StorageError> }` for streaming download
@@ -255,7 +256,8 @@ AiService ──────────────────────┘
 ### StorageService
 
 - `save(key, data: Blob)` — save file to storage (key format: `YYYY/MM/DD/uuid.ext`), buffers entire file
-- `saveStream(key, stream: ReadableStream, size)` — streaming save, pipes chunks directly to storage via writer API (`S3File.writer()` / `Bun.file().writer()`). Used for large file uploads to avoid buffering in memory.
+- `presign(key, contentType) → string | null` — generate presigned PUT URL for direct browser→R2 upload (null for local storage). URL expires in 600s.
+- `exists(key) → boolean` — check if file exists in storage (used by confirm endpoint to verify upload completed)
 - `get(key)` — read file as `Uint8Array` (buffered, kept for tests/internal use)
 - `getStream(key)` — returns `Effect<Stream<Uint8Array, StorageError>, StorageError>` — outer Effect validates existence, inner Stream emits chunks. Used for HTTP download responses.
 - `delete(key)` — delete file from storage
@@ -432,14 +434,13 @@ Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect
 5. Insert metadata in PG via DropRepository
 6. Return drop as JSON (201)
 
-### Upload file — streaming (POST /drops/upload)
+### Upload file — presigned URL (POST /drops/presign + PUT to R2 + POST /drops/confirm)
 
-1. Parse query params (`expiresIn`, `encrypted`) and headers (`X-Filename`, `Content-Type`, `Content-Length`)
-2. Early reject if `Content-Length > MAX_FILE_SIZE` (413)
-3. Stream request body (`c.req.raw.body`) directly to storage via `saveStream()` — zero memory buffering
-4. Insert metadata in PG via DropRepository
-5. Return drop as JSON (201)
-6. Frontend uses `XMLHttpRequest` with `upload.onprogress` for progress bar
+1. **Presign** (`POST /drops/presign`): validate input, generate storageKey, return presigned PUT URL via `s3Client.presign()`
+2. **Upload** (browser → R2 directly): frontend PUTs file to presigned URL via XHR (with `upload.onprogress` for progress bar). Zero server RAM — file never touches the API.
+3. **Confirm** (`POST /drops/confirm`): verify file exists in R2 via `storage.exists()`, insert drop metadata in PG, return drop JSON (201)
+
+R2 bucket must have CORS configured to allow PUT from the frontend origin.
 
 ### Encrypted upload flow
 

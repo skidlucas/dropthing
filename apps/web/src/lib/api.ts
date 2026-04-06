@@ -27,20 +27,36 @@ export async function createDrop(data: {
   return res.json();
 }
 
-export function uploadFile(
-  data: { file: File; expiresIn: number; encrypted?: boolean },
+export async function presignUpload(data: {
+  fileName: string;
+  mimeType: string;
+  size: number;
+  encrypted?: boolean;
+}): Promise<{ uploadUrl: string; storageKey: string }> {
+  const res = await fetch(`${API_URL}/drops/presign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to get upload URL');
+  }
+
+  return res.json();
+}
+
+export function uploadToPresigned(
+  uploadUrl: string,
+  file: File | Blob,
+  contentType: string,
   onProgress?: (progress: number) => void
-): Promise<DropJson> {
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-
-    const params = new URLSearchParams({
-      expiresIn: String(data.expiresIn),
-      ...(data.encrypted ? { encrypted: 'true' } : {}),
-    });
-
-    xhr.open('POST', `${API_URL}/drops/upload?${params}`);
-    xhr.setRequestHeader('X-Filename', encodeURIComponent(data.file.name));
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', contentType);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -49,22 +65,39 @@ export function uploadFile(
     };
 
     xhr.onload = () => {
-      try {
-        const json = JSON.parse(xhr.responseText);
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(json);
-        } else {
-          reject(new Error(json.error || 'Upload failed'));
-        }
-      } catch {
-        reject(new Error('Upload failed'));
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`Upload failed (${xhr.status})`));
       }
     };
 
     xhr.onerror = () => reject(new Error('Network error'));
 
-    xhr.send(data.file);
+    xhr.send(file);
   });
+}
+
+export async function confirmUpload(data: {
+  storageKey: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  expiresIn: number;
+  encrypted?: boolean;
+}): Promise<DropJson> {
+  const res = await fetch(`${API_URL}/drops/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to confirm upload');
+  }
+
+  return res.json();
 }
 
 export async function getDrop(id: string): Promise<DropJson> {

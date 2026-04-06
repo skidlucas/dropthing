@@ -2,14 +2,7 @@ import { Hono } from 'hono';
 import { Effect, Schema, Stream } from 'effect';
 import type { ManagedRuntime } from 'effect';
 import { DropService, type CreateDropInput } from './drop.service.js';
-import {
-  InvalidInputError,
-  UUID,
-  UploadParams,
-  MAX_FILE_SIZE,
-  MIN_TTL,
-  MAX_TTL,
-} from '@dropthing/shared';
+import { InvalidInputError, UUID, UploadParams, MIN_TTL, MAX_TTL } from '@dropthing/shared';
 import { withBasicErrorHandling } from '../../common/helpers.js';
 
 // oxlint-disable-next-line typescript/no-explicit-any -- layer error type is complex, using any for simplicity
@@ -70,33 +63,63 @@ export default function dropRoutes(runtime: AppRuntime) {
     return runtime.runPromise(program);
   });
 
-  drops.post('/upload', async (c) => {
-    const expiresIn = Number(c.req.query('expiresIn'));
-    if (!expiresIn || expiresIn < MIN_TTL || expiresIn > MAX_TTL) {
-      return c.json({ error: `expiresIn must be between ${MIN_TTL} and ${MAX_TTL}` }, 400);
-    }
-
-    const size = Number(c.req.header('content-length') || '0');
-    if (size > MAX_FILE_SIZE) {
-      return c.json({ error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024 / 1024}GB limit` }, 413);
-    }
-
-    const stream = c.req.raw.body;
-    if (!stream) {
-      return c.json({ error: 'Missing request body' }, 400);
-    }
+  drops.post('/presign', async (c) => {
+    const body = await c.req.json();
 
     const program = withBasicErrorHandling(
       c,
       Effect.gen(function* () {
+        const fileName = body.fileName as string;
+        const size = Number(body.size || 0);
+        const encrypted = body.encrypted === true;
+        const mimeType = encrypted
+          ? 'application/octet-stream'
+          : (body.mimeType as string) || 'application/octet-stream';
+
+        if (!fileName) {
+          return yield* new InvalidInputError({ message: 'Missing fileName' });
+        }
+
         const dropService = yield* DropService;
-        const drop = yield* dropService.createFromStream({
-          fileName: decodeURIComponent(c.req.header('x-filename') || 'unnamed'),
-          mimeType: c.req.header('content-type') || 'application/octet-stream',
+        const result = yield* dropService.presignUpload({ fileName, mimeType, size });
+
+        return c.json(result);
+      })
+    );
+
+    return runtime.runPromise(program);
+  });
+
+  drops.post('/confirm', async (c) => {
+    const body = await c.req.json();
+
+    const program = withBasicErrorHandling(
+      c,
+      Effect.gen(function* () {
+        const storageKey = body.storageKey as string;
+        const fileName = body.fileName as string;
+        const mimeType = (body.mimeType as string) || 'application/octet-stream';
+        const size = Number(body.size || 0);
+        const expiresIn = Number(body.expiresIn || 0);
+        const encrypted = body.encrypted === true;
+
+        if (!storageKey || !fileName) {
+          return yield* new InvalidInputError({ message: 'Missing storageKey or fileName' });
+        }
+        if (expiresIn < MIN_TTL || expiresIn > MAX_TTL) {
+          return yield* new InvalidInputError({
+            message: `expiresIn must be between ${MIN_TTL} and ${MAX_TTL}`,
+          });
+        }
+
+        const dropService = yield* DropService;
+        const drop = yield* dropService.confirmUpload({
+          storageKey,
+          fileName,
+          mimeType,
           size,
-          stream,
           expiresIn,
-          encrypted: c.req.query('encrypted') === 'true',
+          encrypted,
         });
         return c.json(drop, 201);
       })

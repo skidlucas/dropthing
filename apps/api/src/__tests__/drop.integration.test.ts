@@ -21,7 +21,8 @@ const MockAiService = Layer.succeed(AiService, {
 
 const MockStorageService = Layer.succeed(StorageService, {
   save: (_key, _data) => Effect.void,
-  saveStream: (_key, _stream, _size) => Effect.void,
+  presign: (_key, _contentType) => Effect.succeed('https://mock-presign-url' as string | null),
+  exists: (_key) => Effect.succeed(true),
   get: (_key) => Effect.succeed(new Uint8Array()),
   getStream: (_key) => Effect.succeed(Stream.fromIterable([new Uint8Array([1, 2, 3])])),
   delete: (_key) => Effect.void,

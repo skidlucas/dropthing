@@ -24,14 +24,20 @@ export const R2StorageLayer = Layer.effect(
       });
     });
 
-    const saveStream = Effect.fn('StorageService.saveStream')(function* (
+    const presign = Effect.fn('StorageService.presign')(function* (
       key: string,
-      stream: ReadableStream<Uint8Array>,
-      _size: number
+      contentType: string
     ) {
-      yield* Effect.tryPromise({
-        try: () => s3Client.write(key, new Response(stream)),
-        catch: (error) => new StorageError({ message: 'Failed to stream file to S3', error }),
+      return yield* Effect.try({
+        try: () => s3Client.presign(key, { method: 'PUT', expiresIn: 600, type: contentType }),
+        catch: (error) => new StorageError({ message: 'Failed to generate presigned URL', error }),
+      });
+    });
+
+    const exists = Effect.fn('StorageService.exists')(function* (key: string) {
+      return yield* Effect.tryPromise({
+        try: () => s3Client.file(key).exists(),
+        catch: (error) => new StorageError({ message: 'Failed to check file existence', error }),
       });
     });
 
@@ -45,11 +51,11 @@ export const R2StorageLayer = Layer.effect(
     const getStream = Effect.fn('StorageService.getStream')(function* (key: string) {
       const s3File = s3Client.file(key);
 
-      const exists = yield* Effect.tryPromise({
+      const fileExists = yield* Effect.tryPromise({
         try: () => s3File.exists(),
         catch: (error) => new StorageError({ message: 'Failed to check S3 file', error }),
       });
-      if (!exists) {
+      if (!fileExists) {
         return yield* new StorageError({
           message: `S3 file not found: ${key}`,
           error: new Error('NOT_FOUND'),
@@ -69,6 +75,6 @@ export const R2StorageLayer = Layer.effect(
       });
     });
 
-    return { save, saveStream, get, getStream, delete: del };
+    return { save, presign, exists, get, getStream, delete: del };
   })
 );

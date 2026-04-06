@@ -35,7 +35,7 @@ export const LocalStorageLayer = Layer.effect(
         try: async () => {
           const writer = Bun.file(filePath).writer();
           for await (const chunk of stream) {
-            writer.write(chunk);
+            await writer.write(chunk);
           }
           await writer.end();
         },

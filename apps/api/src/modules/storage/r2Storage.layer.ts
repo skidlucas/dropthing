@@ -34,7 +34,7 @@ export const R2StorageLayer = Layer.effect(
           const s3File = s3Client.file(key);
           const writer = s3File.writer();
           for await (const chunk of stream) {
-            writer.write(chunk);
+            await writer.write(chunk);
           }
           await writer.end();
         },

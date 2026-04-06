@@ -1,6 +1,6 @@
 import {
+  bigint,
   boolean,
-  integer,
   jsonb,
   pgTable,
   text,
@@ -21,7 +21,7 @@ export const dropsTable = pgTable(
     content: text(),
     fileName: varchar(),
     mimeType: varchar(),
-    size: integer(),
+    size: bigint({ mode: 'number' }),
     storageKey: varchar(),
     metadata: jsonb().$type<{ language?: string; title?: string }>(),
     encrypted: boolean().notNull().default(false),

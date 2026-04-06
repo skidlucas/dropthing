@@ -41,7 +41,7 @@ Ordered by priority and Effect learning progression. Each phase introduces new E
 - [x] `CreateDropInput` as discriminated union (`{ type: 'file'; file: File } | { type: 'text'; content: string } | ...`)
 - [x] `FileTooLargeError` tagged error with `maxSize`/`actualSize`
 - [x] Upload flow: multipart formData → validate → save file / validate URL → insert DB → return drop
-- [x] Constraints: `MAX_FILE_SIZE` (100MB), `MIN_TTL` (60s), `MAX_TTL` (7 days)
+- [x] Constraints: `MAX_FILE_SIZE` (3GB), `MIN_TTL` (60s), `MAX_TTL` (7 days)
 - [x] Text drops preserve formatting (stored as-is in `content` column)
 - [x] Link drops validated via `Schema.URLFromString`
 
@@ -170,7 +170,7 @@ Pick from:
 - [x] File preview (images, videos, audio) — works with E2EE via decrypted Blob URLs
 - [x] UI/UX polish: motion animations, Base UI components, custom CodeMirror theme, sonner toasts
 - [x] Streaming downloads — `StorageService.getStream()` → `Stream<Uint8Array>` → `Stream.toReadableStream()` → HTTP Response. RAM serveur fixe (~chunk size) au lieu de buffer complet
-- [x] File size limit raised to 1 GB (`MAX_FILE_SIZE`)
+- [x] File size limit raised to 3 GB (`MAX_FILE_SIZE`)
 - [ ] Password-protected shares
 - [ ] Download count limit
 - [ ] On-the-fly image compression

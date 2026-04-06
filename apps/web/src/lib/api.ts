@@ -3,22 +3,16 @@ import type { DropJson } from '@dropthing/shared';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export async function createDrop(data: {
-  type: 'file' | 'text' | 'link';
+  type: 'text' | 'link';
   expiresIn: number;
-  file?: File | undefined;
-  content?: string | undefined;
+  content: string;
   encrypted?: boolean;
 }): Promise<DropJson> {
   const formData = new FormData();
   formData.append('type', data.type);
   formData.append('expiresIn', String(data.expiresIn));
   if (data.encrypted) formData.append('encrypted', 'true');
-
-  if (data.type === 'file' && data.file) {
-    formData.append('file', data.file);
-  } else if (data.content) {
-    formData.append('content', data.content);
-  }
+  formData.append('content', data.content);
 
   const res = await fetch(`${API_URL}/drops`, {
     method: 'POST',
@@ -31,6 +25,46 @@ export async function createDrop(data: {
   }
 
   return res.json();
+}
+
+export function uploadFile(
+  data: { file: File; expiresIn: number; encrypted?: boolean },
+  onProgress?: (progress: number) => void
+): Promise<DropJson> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    const params = new URLSearchParams({
+      expiresIn: String(data.expiresIn),
+      ...(data.encrypted ? { encrypted: 'true' } : {}),
+    });
+
+    xhr.open('POST', `${API_URL}/drops/upload?${params}`);
+    xhr.setRequestHeader('X-Filename', encodeURIComponent(data.file.name));
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(e.loaded / e.total);
+      }
+    };
+
+    xhr.onload = () => {
+      try {
+        const json = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(json);
+        } else {
+          reject(new Error(json.error || 'Upload failed'));
+        }
+      } catch {
+        reject(new Error('Upload failed'));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Network error'));
+
+    xhr.send(data.file);
+  });
 }
 
 export async function getDrop(id: string): Promise<DropJson> {

@@ -26,6 +26,8 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         rewrite: (path) => path.replace(/^\/api/, ''),
+        timeout: 0,
+        proxyTimeout: 0,
       },
     },
   },

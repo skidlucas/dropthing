@@ -21,6 +21,7 @@ const MockAiService = Layer.succeed(AiService, {
 
 const MockStorageService = Layer.succeed(StorageService, {
   save: (_key, _data) => Effect.void,
+  saveStream: (_key, _stream, _size) => Effect.void,
   get: (_key) => Effect.succeed(new Uint8Array()),
   getStream: (_key) => Effect.succeed(Stream.fromIterable([new Uint8Array([1, 2, 3])])),
   delete: (_key) => Effect.void,

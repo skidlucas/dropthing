@@ -24,6 +24,24 @@ export const R2StorageLayer = Layer.effect(
       });
     });
 
+    const saveStream = Effect.fn('StorageService.saveStream')(function* (
+      key: string,
+      stream: ReadableStream<Uint8Array>,
+      _size: number
+    ) {
+      yield* Effect.tryPromise({
+        try: async () => {
+          const s3File = s3Client.file(key);
+          const writer = s3File.writer();
+          for await (const chunk of stream) {
+            writer.write(chunk);
+          }
+          await writer.end();
+        },
+        catch: (error) => new StorageError({ message: 'Failed to stream file to S3', error }),
+      });
+    });
+
     const get = Effect.fn('StorageService.get')(function* (key: string) {
       return yield* Effect.tryPromise({
         try: () => s3Client.file(key).bytes(),
@@ -58,6 +76,6 @@ export const R2StorageLayer = Layer.effect(
       });
     });
 
-    return { save, get, getStream, delete: del };
+    return { save, saveStream, get, getStream, delete: del };
   })
 );

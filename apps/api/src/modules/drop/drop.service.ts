@@ -43,6 +43,15 @@ export type CreateDropInput =
       readonly encrypted?: boolean;
     };
 
+export interface CreateFromStreamInput {
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly size: number;
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly expiresIn: number;
+  readonly encrypted: boolean;
+}
+
 type DropServiceShape = {
   readonly create: (
     input: CreateDropInput
@@ -50,6 +59,9 @@ type DropServiceShape = {
     Drop,
     InvalidInputError | FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError
   >;
+  readonly createFromStream: (
+    input: CreateFromStreamInput
+  ) => Effect.Effect<Drop, FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError>;
   readonly get: (
     id: string
   ) => Effect.Effect<
@@ -151,6 +163,34 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
         });
       });
 
+      const createFromStream = Effect.fn('DropService.createFromStream')(function* (
+        input: CreateFromStreamInput
+      ) {
+        if (input.size > MAX_FILE_SIZE) {
+          return yield* new FileTooLargeError({
+            message: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024 / 1024}GB limit`,
+            maxSize: MAX_FILE_SIZE,
+            actualSize: input.size,
+          });
+        }
+
+        const expiresAt = new Date(Date.now() + input.expiresIn * 1000);
+        const storageKey = generateStorageKey(input.fileName);
+
+        yield* storage.saveStream(storageKey, input.stream, input.size);
+
+        return yield* repo.insert({
+          type: 'file',
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          size: input.size,
+          storageKey,
+          metadata: null,
+          encrypted: input.encrypted,
+          expiresAt,
+        });
+      });
+
       const get = Effect.fn('DropService.get')(function* (id: string) {
         const drop = yield* repo.findById(id);
         if (!drop) {
@@ -197,7 +237,7 @@ export class DropService extends ServiceMap.Service<DropService, DropServiceShap
         yield* repo.deleteById(id);
       });
 
-      return { create, get, getFile, getFileStream, delete: del };
+      return { create, createFromStream, get, getFile, getFileStream, delete: del };
     })
   );
 }

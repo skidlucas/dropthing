@@ -171,7 +171,8 @@ Pick from:
 - [x] UI/UX polish: motion animations, Base UI components, custom CodeMirror theme, sonner toasts
 - [x] Streaming downloads — `StorageService.getStream()` → `Stream<Uint8Array>` → `Stream.toReadableStream()` → HTTP Response. RAM serveur fixe (~chunk size) au lieu de buffer complet
 - [x] File size limit raised to 3 GB (`MAX_FILE_SIZE`)
+- [x] Streaming uploads — `POST /drops/upload` with raw body stream, `saveStream()` via `S3File.writer()` / `Bun.file().writer()`, zero memory buffering. Fixes 502 Bad Gateway on large files (OOM from `formData()` buffering)
+- [x] Upload progress bar — `XMLHttpRequest.upload.onprogress` + animated progress bar in UploadPage
 - [ ] Password-protected shares
 - [ ] Download count limit
 - [ ] On-the-fly image compression
-- [ ] Streaming uploads (bypass `formData()`, multipart parsing from raw stream — required if concurrent large uploads on constrained server)

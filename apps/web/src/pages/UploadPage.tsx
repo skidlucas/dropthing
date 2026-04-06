@@ -25,7 +25,7 @@ export function UploadPage() {
   const [encrypted, setEncrypted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { upload, result, uploading, error, reset } = useUploadDrop();
+  const { upload, result, uploading, progress, error, reset } = useUploadDrop();
   const { copy } = useCopyFeedback();
 
   const contentIsUrl = mode === 'text' && isUrl(content);
@@ -291,6 +291,23 @@ export function UploadPage() {
             )}
 
             {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+
+            {/* Progress bar */}
+            {uploading && mode === 'file' && (
+              <div className="space-y-1.5">
+                <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-neutral-50 rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.round(progress * 100)}%` }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                  />
+                </div>
+                <p className="text-neutral-500 text-xs text-center">
+                  {progress >= 1 ? 'Saving...' : `${Math.round(progress * 100)}%`}
+                </p>
+              </div>
+            )}
 
             {/* Submit */}
             <button

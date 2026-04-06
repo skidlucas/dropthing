@@ -20,6 +20,29 @@ export const LocalStorageLayer = Layer.effect(
       });
     });
 
+    const saveStream = Effect.fn('StorageService.saveStream')(function* (
+      key: string,
+      stream: ReadableStream<Uint8Array>,
+      _size: number
+    ) {
+      const filePath = `${UPLOADS_DIR}/${key}`;
+      const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+      yield* Effect.tryPromise({
+        try: () => mkdir(dir, { recursive: true }),
+        catch: (error) => new StorageError({ message: 'Failed to create directory', error }),
+      });
+      yield* Effect.tryPromise({
+        try: async () => {
+          const writer = Bun.file(filePath).writer();
+          for await (const chunk of stream) {
+            writer.write(chunk);
+          }
+          await writer.end();
+        },
+        catch: (error) => new StorageError({ message: 'Failed to stream file to disk', error }),
+      });
+    });
+
     const get = Effect.fn('StorageService.get')(function* (key: string) {
       return yield* Effect.tryPromise({
         try: async () => {
@@ -58,6 +81,6 @@ export const LocalStorageLayer = Layer.effect(
       });
     });
 
-    return { save, get, getStream, delete: del };
+    return { save, saveStream, get, getStream, delete: del };
   })
 );

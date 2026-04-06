@@ -9,7 +9,7 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 ## Core features
 
 - **3 drop types**:
-  - **File**: photos, videos, any file type, max 1 GB
+  - **File**: photos, videos, any file type, max 3 GB (streaming upload)
   - **Text**: code snippets, notes — CodeMirror 6 editor with syntax highlighting
   - **Link**: URL sharing — auto-detected from text content (no separate tab)
 - **Unique share link**: each drop generates a unique URL
@@ -24,7 +24,6 @@ Drops have a configurable time-to-live (max 1 week) and are automatically delete
 - Password protection
 - Download count limit
 - On-the-fly image compression
-- Streaming upload for large files
 
 ---
 
@@ -162,7 +161,7 @@ dropthing/
 │   │       │   └── schema.ts     # Drizzle table definitions (dropsTable)
 │   │       └── modules/
 │   │           ├── drop/
-│   │           │   ├── drop.route.ts       # POST /drops, GET /drops/:id, GET /drops/:id/file, DELETE /drops/:id
+│   │           │   ├── drop.route.ts       # POST /drops, POST /drops/upload (streaming), GET /drops/:id, GET /drops/:id/file, DELETE /drops/:id
 │   │           │   ├── drop.service.ts     # Business logic (validation, storage, URL check)
 │   │           │   └── drop.repository.ts  # Data access (insert, findById, findExpiredWithStorageKey, deleteById, clearStorageKey)
 │   │           ├── cleanup/
@@ -183,7 +182,7 @@ dropthing/
 │       └── src/
 │           ├── App.tsx         # URL-based routing (/ → UploadPage, /drops/:id → DropPage)
 │           ├── lib/
-│           │   ├── api.ts           # API client (createDrop, getDrop, getFileUrl, isUrl, helpers)
+│           │   ├── api.ts           # API client (createDrop, uploadFile with XHR progress, getDrop, getFileUrl, isUrl, helpers)
 │           │   ├── crypto.ts        # E2EE: AES-256-GCM encrypt/decrypt, key import/export, packFile/unpackFile, base64 helpers
 │           │   ├── preview.ts       # File preview helpers: getPreviewType, mimeFromExtension (via mime lib)
 │           │   ├── query-client.ts  # TanStack Query client (staleTime: Infinity for immutable drops)
@@ -246,6 +245,7 @@ AiService ──────────────────────┘
 ### DropService
 
 - `create(input)` — validate input, save file via StorageService (if file type), validate URL (if link type and not encrypted), enrich with AI metadata (skipped when encrypted), compute expiresAt, delegate to repository
+- `createFromStream(input)` — streaming variant for file uploads: validates size, streams file directly to storage via `saveStream()`, inserts DB record. No memory buffering. Used by `POST /drops/upload`.
 - `get(id)` — find drop, yield `DropNotFoundError` if missing, yield `DropExpiredError` if expired
 - `getFile(id)` — calls `get`, validates it's a file drop, returns `{ drop, content }` from StorageService (buffered)
 - `getFileStream(id)` — like `getFile` but returns `{ drop, stream: Stream<Uint8Array, StorageError> }` for streaming download
@@ -254,7 +254,8 @@ AiService ──────────────────────┘
 
 ### StorageService
 
-- `save(key, data: Blob)` — save file to storage (key format: `YYYY/MM/DD/uuid.ext`)
+- `save(key, data: Blob)` — save file to storage (key format: `YYYY/MM/DD/uuid.ext`), buffers entire file
+- `saveStream(key, stream: ReadableStream, size)` — streaming save, pipes chunks directly to storage via writer API (`S3File.writer()` / `Bun.file().writer()`). Used for large file uploads to avoid buffering in memory.
 - `get(key)` — read file as `Uint8Array` (buffered, kept for tests/internal use)
 - `getStream(key)` — returns `Effect<Stream<Uint8Array, StorageError>, StorageError>` — outer Effect validates existence, inner Stream emits chunks. Used for HTTP download responses.
 - `delete(key)` — delete file from storage
@@ -297,6 +298,7 @@ Simple URL-based routing in `App.tsx` (no react-router):
 - **Auto-detect URL**: if text content is a single valid HTTP(S) URL → sent as `type: 'link'` transparently, with "Link detected" indicator
 - **TTL selector**: pill buttons (5 min / 1 hour / 1 day / 7 days)
 - **Encryption toggle**: custom toggle with lock icon animation, opt-in E2EE for any drop type (hidden when URL detected)
+- **Progress bar**: animated progress bar during file uploads (motion width animation), shows percentage
 - **After upload**: animated checkmark (spring + SVG pathLength), share link with copy-to-clipboard (sonner toast), "Drop another" reset
 - **State management**: 7 `useState` (form inputs) + `useUploadDrop` (mutation) + `useCopyFeedback` (clipboard)
 
@@ -316,7 +318,7 @@ Simple URL-based routing in `App.tsx` (no react-router):
 - **`useCopyFeedback`** — clipboard write + sonner toast notification
 - **`useDrop(id, keyString)`** — `useQuery` for drop fetch + text decryption, error mapping
 - **`useFilePreview(drop, id, keyString)`** — `useQuery` for file preview (encrypted: decrypt → blob URL, non-encrypted: direct URL), MIME inference, blob cleanup on unmount
-- **`useUploadDrop`** — `useMutation` for upload (encryption + API call), returns `{ drop, keyFragment }`, `reset()` for form clear
+- **`useUploadDrop`** — `useMutation` for upload (encryption + API call), exposes `progress` (0–1) for file uploads via XHR, returns `{ drop, keyFragment }`, `reset()` for form clear
 
 ### CodeEditor component
 
@@ -372,7 +374,7 @@ Polymorphic per drop type, no fixed schema enforced at DB level (validated by Ef
 
 | Type   | Required fields    | Validation                         | Storage                      |
 | ------ | ------------------ | ---------------------------------- | ---------------------------- |
-| `file` | `file` (File)      | Size ≤ 1 GB                        | StorageService (R2 or local) |
+| `file` | `file` (File)      | Size ≤ 3 GB                        | StorageService (R2 or local) |
 | `text` | `content` (string) | Non-empty                          | DB `content` column          |
 | `link` | `content` (string) | Valid URL (skipped when encrypted) | DB `content` column          |
 
@@ -421,15 +423,23 @@ Input validation (e.g., UUID format) uses `Schema.decodeUnknownEffect` + `Effect
 
 ## Main flows
 
-### Upload (POST /drops)
+### Upload text/link (POST /drops)
 
 1. Parse `FormData`: extract `type`, `expiresIn`, `encrypted` via `UploadParams` schema
-2. Extract `file` or `content` from FormData (route)
-3. DropService validates (file size / URL format)
-4. Save file via StorageService if file type
-5. Call AiService to enrich with metadata (language, title) — text/link only, graceful degradation
-6. Insert metadata in PG via DropRepository
-7. Return drop as JSON (201)
+2. Extract `content` from FormData (route)
+3. DropService validates (URL format for links)
+4. Call AiService to enrich with metadata (language, title) — graceful degradation
+5. Insert metadata in PG via DropRepository
+6. Return drop as JSON (201)
+
+### Upload file — streaming (POST /drops/upload)
+
+1. Parse query params (`expiresIn`, `encrypted`) and headers (`X-Filename`, `Content-Type`, `Content-Length`)
+2. Early reject if `Content-Length > MAX_FILE_SIZE` (413)
+3. Stream request body (`c.req.raw.body`) directly to storage via `saveStream()` — zero memory buffering
+4. Insert metadata in PG via DropRepository
+5. Return drop as JSON (201)
+6. Frontend uses `XMLHttpRequest` with `upload.onprogress` for progress bar
 
 ### Encrypted upload flow
 

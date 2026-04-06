@@ -2,7 +2,14 @@ import { Hono } from 'hono';
 import { Effect, Schema, Stream } from 'effect';
 import type { ManagedRuntime } from 'effect';
 import { DropService, type CreateDropInput } from './drop.service.js';
-import { InvalidInputError, UUID, UploadParams } from '@dropthing/shared';
+import {
+  InvalidInputError,
+  UUID,
+  UploadParams,
+  MAX_FILE_SIZE,
+  MIN_TTL,
+  MAX_TTL,
+} from '@dropthing/shared';
 import { withBasicErrorHandling } from '../../common/helpers.js';
 
 // oxlint-disable-next-line typescript/no-explicit-any -- layer error type is complex, using any for simplicity
@@ -56,6 +63,41 @@ export default function dropRoutes(runtime: AppRuntime) {
         }
 
         const drop = yield* dropService.create(input);
+        return c.json(drop, 201);
+      })
+    );
+
+    return runtime.runPromise(program);
+  });
+
+  drops.post('/upload', async (c) => {
+    const expiresIn = Number(c.req.query('expiresIn'));
+    if (!expiresIn || expiresIn < MIN_TTL || expiresIn > MAX_TTL) {
+      return c.json({ error: `expiresIn must be between ${MIN_TTL} and ${MAX_TTL}` }, 400);
+    }
+
+    const size = Number(c.req.header('content-length') || '0');
+    if (size > MAX_FILE_SIZE) {
+      return c.json({ error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024 / 1024}GB limit` }, 413);
+    }
+
+    const stream = c.req.raw.body;
+    if (!stream) {
+      return c.json({ error: 'Missing request body' }, 400);
+    }
+
+    const program = withBasicErrorHandling(
+      c,
+      Effect.gen(function* () {
+        const dropService = yield* DropService;
+        const drop = yield* dropService.createFromStream({
+          fileName: decodeURIComponent(c.req.header('x-filename') || 'unnamed'),
+          mimeType: c.req.header('content-type') || 'application/octet-stream',
+          size,
+          stream,
+          expiresIn,
+          encrypted: c.req.query('encrypted') === 'true',
+        });
         return c.json(drop, 201);
       })
     );

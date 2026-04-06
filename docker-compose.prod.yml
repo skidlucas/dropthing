@@ -28,6 +28,16 @@ services:
     networks:
       - coolify
       - default
+    labels:
+      # Per-router HTTP→HTTPS redirect — allows Traefik ACME handler to intercept
+      # /.well-known/acme-challenge/ before this redirect (ACME has max priority).
+      # "Force HTTPS" must stay unchecked in Coolify to avoid global entrypoint redirect.
+      traefik.http.routers.dropthing-http.entryPoints: http
+      traefik.http.routers.dropthing-http.rule: 'Host(`dropthing.lukapps.fr`)'
+      traefik.http.routers.dropthing-http.middlewares: dropthing-redirect
+      traefik.http.routers.dropthing-http.service: noop@internal
+      traefik.http.middlewares.dropthing-redirect.redirectscheme.scheme: https
+      traefik.http.middlewares.dropthing-redirect.redirectscheme.permanent: 'true'
 
 networks:
   coolify:

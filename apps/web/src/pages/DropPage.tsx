@@ -164,7 +164,7 @@ export function DropPage({ id }: { id: string }) {
               ) : (
                 <a
                   href={getFileUrl(id)}
-                  download
+                  download={drop.fileName ?? true}
                   className="block w-full py-2.5 bg-neutral-50 text-neutral-950 rounded-lg font-medium hover:bg-neutral-200 active:scale-[0.98] transition-all text-center"
                 >
                   Download

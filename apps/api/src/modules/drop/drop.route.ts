@@ -155,6 +155,18 @@ export default function dropRoutes(runtime: AppRuntime) {
         );
 
         const dropService = yield* DropService;
+        const r2PublicUrl = process.env.R2_PUBLIC_URL;
+
+        // If CDN is configured, validate the drop and redirect
+        if (r2PublicUrl) {
+          const drop = yield* dropService.get(id);
+          if (drop.type !== 'file' || !drop.storageKey) {
+            return yield* new InvalidInputError({ message: 'Drop is not a file' });
+          }
+          return c.redirect(`${r2PublicUrl}/${process.env.R2_ENV}/${drop.storageKey}`, 302);
+        }
+
+        // Fallback: stream through API (local storage mode)
         const { drop, stream } = yield* dropService.getFileStream(id);
 
         return new Response(Stream.toReadableStream(stream), {

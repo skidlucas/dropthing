@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { getFileUrl, formatSize, timeRemaining } from '@/lib/api';
-import { importKey, decrypt, unpackFile } from '@/lib/crypto';
+import { importKey, decryptFileChunked } from '@/lib/crypto';
 import { useDrop } from '@/hooks/useDrop';
 import { useFilePreview } from '@/hooks/useFilePreview';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
@@ -31,11 +31,9 @@ export function DropPage({ id }: { id: string }) {
     setDownloading(true);
     try {
       const res = await fetch(getFileUrl(id));
-      const ciphertext = await res.arrayBuffer();
+      const ciphertext = await res.blob();
       const key = await importKey(keyString);
-      const decrypted = await decrypt(key, ciphertext);
-      const { fileName, content } = unpackFile(decrypted);
-      const blob = new Blob([content.buffer as ArrayBuffer]);
+      const { fileName, blob } = await decryptFileChunked(key, ciphertext);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

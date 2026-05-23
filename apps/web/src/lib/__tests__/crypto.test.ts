@@ -3,12 +3,17 @@ import {
   arrayBufferToBase64,
   base64ToArrayBuffer,
   decrypt,
+  createFileChunkIv,
+  decryptFileChunked,
   decryptText,
+  encodeEncryptedFileHeader,
   encrypt,
+  encryptFileChunked,
   encryptText,
   exportKey,
   generateKey,
   importKey,
+  parseEncryptedFileHeader,
   packFile,
   unpackFile,
 } from '../crypto.js';
@@ -158,6 +163,94 @@ describe('crypto', () => {
 
       expect(unpacked.fileName).toBe('empty.txt');
       expect(unpacked.content.length).toBe(0);
+    });
+  });
+
+  describe('chunked encrypted file container', () => {
+    it('encodes and parses container metadata', () => {
+      const baseIv = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+      const header = encodeEncryptedFileHeader({
+        fileName: 'large-秘密.bin',
+        originalSize: 5_000_000_000,
+        chunkSize: 1024,
+        baseIv,
+        chunkCiphertextLengths: [1040, 27],
+      });
+
+      const parsed = parseEncryptedFileHeader(header.buffer as ArrayBuffer);
+
+      expect(parsed.version).toBe(1);
+      expect(parsed.fileName).toBe('large-秘密.bin');
+      expect(parsed.originalSize).toBe(5_000_000_000);
+      expect(parsed.chunkSize).toBe(1024);
+      expect(parsed.baseIv).toEqual(baseIv);
+      expect(parsed.chunkCiphertextLengths).toEqual([1040, 27]);
+      expect(parsed.headerLength).toBe(header.byteLength);
+    });
+
+    it('uses a random-prefix plus chunk-counter IV layout', () => {
+      const baseIv = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 99, 99, 99, 99]);
+
+      expect(createFileChunkIv(baseIv, 0)).toEqual(
+        new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0])
+      );
+      expect(createFileChunkIv(baseIv, 258)).toEqual(
+        new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 1, 2])
+      );
+    });
+
+    it('round-trips a file using forced small chunks', async () => {
+      const key = await generateKey();
+      const bytes = new Uint8Array(Array.from({ length: 25 }, (_, i) => i));
+      const file = new File([bytes], 'chunked.bin', { type: 'application/octet-stream' });
+
+      const encrypted = await encryptFileChunked(key, file, { chunkSize: 7 });
+      const decrypted = await decryptFileChunked(key, encrypted);
+
+      expect(decrypted.fileName).toBe('chunked.bin');
+      expect(new Uint8Array(await decrypted.blob.arrayBuffer())).toEqual(bytes);
+    });
+
+    it('rejects tampered authenticated metadata', async () => {
+      const key = await generateKey();
+      const file = new File([new Uint8Array([1, 2, 3, 4, 5])], 'secret.bin');
+      const encrypted = await encryptFileChunked(key, file, { chunkSize: 2 });
+      const tampered = new Uint8Array(await encrypted.arrayBuffer());
+
+      // Flip a bit in the original-size field. This header is used as AES-GCM AAD,
+      // so decryption must fail before returning modified metadata/content.
+      tampered[18] ^= 0xff;
+
+      await expect(decryptFileChunked(key, tampered.buffer)).rejects.toThrow();
+    });
+
+    it('rejects reordered encrypted chunks', async () => {
+      const key = await generateKey();
+      const file = new File([new Uint8Array([1, 2, 3, 4])], 'ordered.bin');
+      const encrypted = await encryptFileChunked(key, file, { chunkSize: 2 });
+      const bytes = new Uint8Array(await encrypted.arrayBuffer());
+      const header = parseEncryptedFileHeader(bytes.buffer as ArrayBuffer);
+      const firstLength = header.chunkCiphertextLengths[0];
+      const secondLength = header.chunkCiphertextLengths[1];
+      const firstStart = header.headerLength;
+      const secondStart = firstStart + firstLength;
+      const reordered = new Uint8Array(bytes);
+
+      reordered.set(bytes.slice(secondStart, secondStart + secondLength), firstStart);
+      reordered.set(bytes.slice(firstStart, firstStart + firstLength), secondStart);
+
+      await expect(decryptFileChunked(key, reordered.buffer)).rejects.toThrow();
+    });
+
+    it('round-trips an empty file', async () => {
+      const key = await generateKey();
+      const file = new File([], 'empty.dat');
+
+      const encrypted = await encryptFileChunked(key, file, { chunkSize: 4 });
+      const decrypted = await decryptFileChunked(key, encrypted);
+
+      expect(decrypted.fileName).toBe('empty.dat');
+      expect(decrypted.blob.size).toBe(0);
     });
   });
 

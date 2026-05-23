@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { DropJson } from '@dropthing/shared';
 import { getFileUrl } from '@/lib/api';
-import { importKey, decrypt, unpackFile } from '@/lib/crypto';
+import { importKey, decryptFileChunked } from '@/lib/crypto';
 import { getPreviewType, mimeFromExtension, type PreviewType } from '@/lib/preview';
 
 interface FilePreviewData {
@@ -34,15 +34,14 @@ async function buildPreview(
   // Encrypted: decrypt to recover filename + build preview
   if (drop.encrypted && keyString) {
     const res = await fetch(getFileUrl(id));
-    const ciphertext = await res.arrayBuffer();
+    const ciphertext = await res.blob();
     const key = await importKey(keyString);
-    const decrypted = await decrypt(key, ciphertext);
-    const { fileName, content } = unpackFile(decrypted);
+    const { fileName, blob: contentBlob } = await decryptFileChunked(key, ciphertext);
     const mime = mimeFromExtension(fileName);
     const type = mime ? getPreviewType(mime) : null;
 
     if (type && mime) {
-      const blob = new Blob([content.buffer as ArrayBuffer], { type: mime });
+      const blob = contentBlob.slice(0, contentBlob.size, mime);
       return {
         previewUrl: URL.createObjectURL(blob),
         previewType: type,

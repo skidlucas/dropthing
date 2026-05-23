@@ -5,10 +5,9 @@ import { createDrop, presignUpload, uploadToPresigned, confirmUpload } from '@/l
 import {
   generateKey,
   exportKey,
-  encrypt,
   encryptText,
   arrayBufferToBase64,
-  packFile,
+  encryptFileChunked,
 } from '@/lib/crypto';
 
 export interface UploadInput {
@@ -45,9 +44,7 @@ async function performUpload(
     if (shouldEncrypt) {
       const key = await generateKey();
       keyFragment = await exportKey(key);
-      const packed = packFile(file.name, await file.arrayBuffer());
-      const ciphertext = await encrypt(key, packed);
-      uploadFile = new Blob([ciphertext]);
+      uploadFile = await encryptFileChunked(key, file);
       fileName = 'encrypted.bin';
       mimeType = 'application/octet-stream';
     }

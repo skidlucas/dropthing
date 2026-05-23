@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { getFileUrl, formatSize, timeRemaining } from '@/lib/api';
-import { importKey, decryptFileChunked } from '@/lib/crypto';
+import { importKey, decryptFileStream, readEncryptedFileHeader } from '@/lib/crypto';
 import { useDrop } from '@/hooks/useDrop';
 import { useFilePreview } from '@/hooks/useFilePreview';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
@@ -14,6 +14,31 @@ const fadeIn = {
   transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] as const },
 };
 
+type SaveFilePicker = (options: { suggestedName?: string }) => Promise<{
+  createWritable: () => Promise<WritableStream<Uint8Array>>;
+}>;
+
+function getSaveFilePicker(): SaveFilePicker | null {
+  const win = window as Window & { showSaveFilePicker?: SaveFilePicker };
+  return win.showSaveFilePicker ?? null;
+}
+
+async function fetchFileBody(url: string): Promise<ReadableStream<Uint8Array>> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  if (res.body) return res.body;
+  return (await res.blob()).stream();
+}
+
+async function saveBlob(blob: Blob, fileName: string): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function DropPage({ id }: { id: string }) {
   const keyString = window.location.hash.slice(1);
   const { drop, decryptedContent, isLoading, error } = useDrop(id, keyString);
@@ -22,6 +47,7 @@ export function DropPage({ id }: { id: string }) {
     previewType,
     isLoading: previewLoading,
     decryptedFileName,
+    previewUnavailableReason,
   } = useFilePreview(drop, id, keyString);
   const { copy } = useCopyFeedback();
   const [downloading, setDownloading] = useState(false);
@@ -30,18 +56,26 @@ export function DropPage({ id }: { id: string }) {
     if (!drop || !keyString) return;
     setDownloading(true);
     try {
-      const res = await fetch(getFileUrl(id));
-      const ciphertext = await res.blob();
       const key = await importKey(keyString);
-      const { fileName, blob } = await decryptFileChunked(key, ciphertext);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(url);
+      const saveFilePicker = getSaveFilePicker();
+
+      if (saveFilePicker) {
+        const headerStream = await fetchFileBody(getFileUrl(id));
+        const header = await readEncryptedFileHeader(key, headerStream);
+        const fileHandle = await saveFilePicker({ suggestedName: header.fileName });
+        const writable = await fileHandle.createWritable();
+        const body = await fetchFileBody(getFileUrl(id));
+        const decrypted = await decryptFileStream(key, body);
+        await decrypted.stream.pipeTo(writable);
+        return;
+      }
+
+      const body = await fetchFileBody(getFileUrl(id));
+      const decrypted = await decryptFileStream(key, body);
+      const blob = await new Response(decrypted.stream).blob();
+      await saveBlob(blob, decrypted.fileName);
     } catch {
-      // Download error — user can retry
+      // Download error or save dialog cancelled — user can retry
     } finally {
       setDownloading(false);
     }
@@ -144,6 +178,12 @@ export function DropPage({ id }: { id: string }) {
                 <audio src={previewUrl} controls className="w-full">
                   <track kind="captions" />
                 </audio>
+              )}
+
+              {previewUnavailableReason && (
+                <p className="text-neutral-500 text-sm text-center border border-neutral-800 rounded-lg px-3 py-2 bg-neutral-900/50">
+                  {previewUnavailableReason}
+                </p>
               )}
 
               {drop.encrypted && !keyString ? (

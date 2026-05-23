@@ -2,14 +2,24 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { DropJson } from '@dropthing/shared';
 import { getFileUrl } from '@/lib/api';
-import { importKey, decryptFileChunked } from '@/lib/crypto';
+import { importKey, decryptFileStream, readEncryptedFileHeader } from '@/lib/crypto';
 import { getPreviewType, mimeFromExtension, type PreviewType } from '@/lib/preview';
+
+const MAX_ENCRYPTED_PREVIEW_SIZE = 100 * 1024 * 1024;
 
 interface FilePreviewData {
   previewUrl: string;
-  previewType: PreviewType;
+  previewType: PreviewType | null;
   decryptedFileName: string | null;
   isBlobUrl: boolean;
+  previewUnavailableReason: string | null;
+}
+
+async function fetchFileBody(url: string): Promise<ReadableStream<Uint8Array>> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Preview fetch failed (${res.status})`);
+  if (res.body) return res.body;
+  return (await res.blob()).stream();
 }
 
 async function buildPreview(
@@ -26,32 +36,43 @@ async function buildPreview(
         previewType: type,
         decryptedFileName: null,
         isBlobUrl: false,
+        previewUnavailableReason: null,
       };
     }
     return null;
   }
 
-  // Encrypted: decrypt to recover filename + build preview
+  // Encrypted: read and authenticate only the header first so large files don't get
+  // decrypted just to discover their filename/previewability.
   if (drop.encrypted && keyString) {
-    const res = await fetch(getFileUrl(id));
-    const ciphertext = await res.blob();
     const key = await importKey(keyString);
-    const { fileName, blob: contentBlob } = await decryptFileChunked(key, ciphertext);
-    const mime = mimeFromExtension(fileName);
+    const header = await readEncryptedFileHeader(key, await fetchFileBody(getFileUrl(id)));
+    const mime = mimeFromExtension(header.fileName);
     const type = mime ? getPreviewType(mime) : null;
 
-    if (type && mime) {
-      const blob = contentBlob.slice(0, contentBlob.size, mime);
+    if (!type || !mime || header.originalSize > MAX_ENCRYPTED_PREVIEW_SIZE) {
       return {
-        previewUrl: URL.createObjectURL(blob),
-        previewType: type,
-        decryptedFileName: fileName,
-        isBlobUrl: true,
+        previewUrl: '',
+        previewType: null,
+        decryptedFileName: header.fileName,
+        isBlobUrl: false,
+        previewUnavailableReason:
+          header.originalSize > MAX_ENCRYPTED_PREVIEW_SIZE
+            ? 'Preview disabled for large encrypted files. Download to view.'
+            : null,
       };
     }
 
-    // Not previewable but we still have the filename
-    return { previewUrl: '', previewType: 'image', decryptedFileName: fileName, isBlobUrl: false };
+    const decrypted = await decryptFileStream(key, await fetchFileBody(getFileUrl(id)));
+    const contentBlob = await new Response(decrypted.stream).blob();
+    const blob = contentBlob.slice(0, contentBlob.size, mime);
+    return {
+      previewUrl: URL.createObjectURL(blob),
+      previewType: type,
+      decryptedFileName: decrypted.fileName,
+      isBlobUrl: true,
+      previewUnavailableReason: null,
+    };
   }
 
   return null;
@@ -61,7 +82,7 @@ export function useFilePreview(drop: DropJson | null, id: string, keyString: str
   const isFileDrop = drop?.type === 'file';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['drop', id, 'preview'],
+    queryKey: ['drop', id, 'preview', keyString],
     queryFn: () => buildPreview(drop!, id, keyString),
     enabled: isFileDrop === true,
   });
@@ -82,5 +103,6 @@ export function useFilePreview(drop: DropJson | null, id: string, keyString: str
     previewType: hasPreview ? data.previewType : null,
     isLoading: isFileDrop === true && isLoading,
     decryptedFileName: data?.decryptedFileName ?? null,
+    previewUnavailableReason: data?.previewUnavailableReason ?? null,
   };
 }

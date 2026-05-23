@@ -5,15 +5,18 @@ import {
   decrypt,
   createFileChunkIv,
   decryptFileChunked,
+  decryptFileStream,
   decryptText,
   encodeEncryptedFileHeader,
   encrypt,
   encryptFileChunked,
+  encryptFileToReadableStream,
   encryptText,
   exportKey,
   generateKey,
   importKey,
   parseEncryptedFileHeader,
+  readEncryptedFileHeader,
   packFile,
   unpackFile,
 } from '../crypto.js';
@@ -167,34 +170,40 @@ describe('crypto', () => {
   });
 
   describe('chunked encrypted file container', () => {
-    it('encodes and parses container metadata', () => {
-      const baseIv = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-      const header = encodeEncryptedFileHeader({
+    it('encodes and parses authenticated container metadata', async () => {
+      const key = await generateKey();
+      const noncePrefix = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+      const header = await encodeEncryptedFileHeader(key, {
         fileName: 'large-秘密.bin',
         originalSize: 5_000_000_000,
-        chunkSize: 1024,
-        baseIv,
-        chunkCiphertextLengths: [1040, 27],
+        chunkSize: 1_073_741_824,
+        noncePrefix,
+        chunkCiphertextLengths: [
+          1_073_741_840, 1_073_741_840, 1_073_741_840, 1_073_741_840, 705_032_720,
+        ],
       });
 
       const parsed = parseEncryptedFileHeader(header.buffer as ArrayBuffer);
 
-      expect(parsed.version).toBe(1);
+      expect(parsed.version).toBe(2);
       expect(parsed.fileName).toBe('large-秘密.bin');
       expect(parsed.originalSize).toBe(5_000_000_000);
-      expect(parsed.chunkSize).toBe(1024);
-      expect(parsed.baseIv).toEqual(baseIv);
-      expect(parsed.chunkCiphertextLengths).toEqual([1040, 27]);
+      expect(parsed.chunkSize).toBe(1_073_741_824);
+      expect(parsed.noncePrefix).toEqual(noncePrefix);
+      expect(parsed.chunkCiphertextLengths).toEqual([
+        1_073_741_840, 1_073_741_840, 1_073_741_840, 1_073_741_840, 705_032_720,
+      ]);
+      expect(parsed.headerTag.byteLength).toBe(16);
       expect(parsed.headerLength).toBe(header.byteLength);
     });
 
     it('uses a random-prefix plus chunk-counter IV layout', () => {
-      const baseIv = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 99, 99, 99, 99]);
+      const noncePrefix = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
 
-      expect(createFileChunkIv(baseIv, 0)).toEqual(
+      expect(createFileChunkIv(noncePrefix, 0)).toEqual(
         new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0])
       );
-      expect(createFileChunkIv(baseIv, 258)).toEqual(
+      expect(createFileChunkIv(noncePrefix, 258)).toEqual(
         new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 1, 2])
       );
     });
@@ -211,16 +220,49 @@ describe('crypto', () => {
       expect(new Uint8Array(await decrypted.blob.arrayBuffer())).toEqual(bytes);
     });
 
+    it('streams encrypted file upload and download', async () => {
+      const key = await generateKey();
+      const bytes = new Uint8Array(Array.from({ length: 31 }, (_, i) => 255 - i));
+      const file = new File([bytes], 'streamed.bin');
+
+      const encrypted = await encryptFileToReadableStream(key, file, { chunkSize: 6 });
+      const decrypted = await decryptFileStream(key, encrypted.stream);
+      const decryptedBytes = new Uint8Array(await new Response(decrypted.stream).arrayBuffer());
+
+      expect(encrypted.encryptedSize).toBeGreaterThan(bytes.byteLength);
+      expect(decrypted.fileName).toBe('streamed.bin');
+      expect(decrypted.originalSize).toBe(bytes.byteLength);
+      expect(decryptedBytes).toEqual(bytes);
+    });
+
+    it('reads authenticated header metadata without decrypting the whole file', async () => {
+      const key = await generateKey();
+      const file = new File([new Uint8Array([1, 2, 3, 4, 5])], 'preview.jpg');
+      const encrypted = await encryptFileChunked(key, file, { chunkSize: 2 });
+
+      const header = await readEncryptedFileHeader(key, encrypted.stream());
+
+      expect(header.fileName).toBe('preview.jpg');
+      expect(header.originalSize).toBe(5);
+      expect(header.chunkCiphertextLengths).toEqual([18, 18, 17]);
+    });
+
     it('rejects tampered authenticated metadata', async () => {
       const key = await generateKey();
       const file = new File([new Uint8Array([1, 2, 3, 4, 5])], 'secret.bin');
       const encrypted = await encryptFileChunked(key, file, { chunkSize: 2 });
       const tampered = new Uint8Array(await encrypted.arrayBuffer());
+      const header = parseEncryptedFileHeader(tampered.buffer as ArrayBuffer);
 
-      // Flip a bit in the original-size field. This header is used as AES-GCM AAD,
-      // so decryption must fail before returning modified metadata/content.
-      tampered[18] ^= 0xff;
+      // Flip a bit in the filename. The header has its own AES-GCM auth tag, so
+      // this must fail even if no content bytes are decrypted.
+      const fileNameOffset =
+        header.headerWithoutTagLength -
+        header.chunkCiphertextLengths.length * 4 -
+        'secret.bin'.length;
+      tampered[fileNameOffset] ^= 0xff;
 
+      await expect(readEncryptedFileHeader(key, new Blob([tampered]).stream())).rejects.toThrow();
       await expect(decryptFileChunked(key, tampered.buffer)).rejects.toThrow();
     });
 
@@ -242,15 +284,18 @@ describe('crypto', () => {
       await expect(decryptFileChunked(key, reordered.buffer)).rejects.toThrow();
     });
 
-    it('round-trips an empty file', async () => {
+    it('round-trips an empty file with authenticated header metadata', async () => {
       const key = await generateKey();
       const file = new File([], 'empty.dat');
 
       const encrypted = await encryptFileChunked(key, file, { chunkSize: 4 });
       const decrypted = await decryptFileChunked(key, encrypted);
+      const tampered = new Uint8Array(await encrypted.arrayBuffer());
+      tampered[35] ^= 0xff;
 
       expect(decrypted.fileName).toBe('empty.dat');
       expect(decrypted.blob.size).toBe(0);
+      await expect(decryptFileChunked(key, tampered.buffer)).rejects.toThrow();
     });
   });
 

@@ -1,13 +1,22 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import type { DropJson } from '@dropthing/shared';
-import { createDrop, presignUpload, uploadToPresigned, confirmUpload } from '@/lib/api';
+import {
+  createDrop,
+  presignUpload,
+  uploadToPresigned,
+  uploadStreamToPresigned,
+  confirmUpload,
+  supportsStreamingUpload,
+} from '@/lib/api';
 import {
   generateKey,
   exportKey,
   encryptText,
   arrayBufferToBase64,
   encryptFileChunked,
+  encryptFileToReadableStream,
+  estimateEncryptedFileSize,
 } from '@/lib/crypto';
 
 export interface UploadInput {
@@ -37,14 +46,15 @@ async function performUpload(
   let keyFragment = '';
 
   if (mode === 'file' && file) {
-    let uploadFile: File | Blob = file;
     let fileName = file.name;
     let mimeType = file.type || 'application/octet-stream';
+    let uploadSize = file.size;
+    let key: CryptoKey | null = null;
 
     if (shouldEncrypt) {
-      const key = await generateKey();
+      key = await generateKey();
       keyFragment = await exportKey(key);
-      uploadFile = await encryptFileChunked(key, file);
+      uploadSize = estimateEncryptedFileSize(file).encryptedSize;
       fileName = 'encrypted.bin';
       mimeType = 'application/octet-stream';
     }
@@ -53,19 +63,35 @@ async function performUpload(
     const { uploadUrl, storageKey } = await presignUpload({
       fileName,
       mimeType,
-      size: uploadFile.size,
+      size: uploadSize,
       encrypted: shouldEncrypt,
     });
 
     // 2. Upload directly to R2
-    await uploadToPresigned(uploadUrl, uploadFile, mimeType, setProgress);
+    if (shouldEncrypt && key) {
+      if (supportsStreamingUpload()) {
+        try {
+          const { stream, encryptedSize } = await encryptFileToReadableStream(key, file);
+          await uploadStreamToPresigned(uploadUrl, stream, mimeType, encryptedSize, setProgress);
+        } catch {
+          setProgress(0);
+          const encryptedBlob = await encryptFileChunked(key, file);
+          await uploadToPresigned(uploadUrl, encryptedBlob, mimeType, setProgress);
+        }
+      } else {
+        const encryptedBlob = await encryptFileChunked(key, file);
+        await uploadToPresigned(uploadUrl, encryptedBlob, mimeType, setProgress);
+      }
+    } else {
+      await uploadToPresigned(uploadUrl, file, mimeType, setProgress);
+    }
 
     // 3. Confirm upload and create drop record
     const drop = await confirmUpload({
       storageKey,
       fileName,
       mimeType,
-      size: uploadFile.size,
+      size: uploadSize,
       expiresIn: ttl,
       encrypted: shouldEncrypt,
     });

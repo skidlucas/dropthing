@@ -78,6 +78,73 @@ export function uploadToPresigned(
   });
 }
 
+export async function uploadStreamToPresigned(
+  uploadUrl: string,
+  stream: ReadableStream<Uint8Array>,
+  contentType: string,
+  size: number,
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  const res = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: trackReadableStreamProgress(stream, size, onProgress),
+    duplex: 'half',
+  } as RequestInit & { duplex: 'half' });
+
+  if (!res.ok) {
+    throw new Error(`Upload failed (${res.status})`);
+  }
+  onProgress?.(1);
+}
+
+export function supportsStreamingUpload(): boolean {
+  if (typeof ReadableStream === 'undefined' || typeof Request === 'undefined') return false;
+
+  try {
+    let duplexAccessed = false;
+    const request = new Request('https://example.com', {
+      method: 'POST',
+      body: new ReadableStream<Uint8Array>(),
+      get duplex() {
+        duplexAccessed = true;
+        return 'half' as const;
+      },
+    } as RequestInit & { duplex: 'half' });
+
+    return duplexAccessed && !request.headers.has('Content-Type');
+  } catch {
+    return false;
+  }
+}
+
+function trackReadableStreamProgress(
+  stream: ReadableStream<Uint8Array>,
+  size: number,
+  onProgress?: (progress: number) => void
+): ReadableStream<Uint8Array> {
+  if (!onProgress) return stream;
+
+  const reader = stream.getReader();
+  let loaded = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) {
+        controller.close();
+        return;
+      }
+
+      loaded += value.byteLength;
+      onProgress(size > 0 ? Math.min(loaded / size, 1) : 1);
+      controller.enqueue(value);
+    },
+    async cancel(reason) {
+      await reader.cancel(reason);
+    },
+  });
+}
+
 export async function confirmUpload(data: {
   storageKey: string;
   fileName: string;

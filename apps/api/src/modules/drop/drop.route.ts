@@ -157,17 +157,20 @@ export default function dropRoutes(runtime: AppRuntime) {
         const dropService = yield* DropService;
         const r2PublicUrl = process.env.R2_PUBLIC_URL;
 
-        // If CDN is configured, validate the drop and redirect
-        if (r2PublicUrl) {
-          const drop = yield* dropService.get(id);
-          if (drop.type !== 'file' || !drop.storageKey) {
-            return yield* new InvalidInputError({ message: 'Drop is not a file' });
-          }
+        // Encrypted files must be readable by browser JS for client-side decryption.
+        // Avoid redirecting those to the CDN: Cloudflare/R2 CORS config can block fetch(),
+        // while the same-origin API stream works without exposing storage CORS details.
+        const drop = yield* dropService.get(id);
+        if (drop.type !== 'file' || !drop.storageKey) {
+          return yield* new InvalidInputError({ message: 'Drop is not a file' });
+        }
+
+        if (r2PublicUrl && !drop.encrypted) {
           return c.redirect(`${r2PublicUrl}/${process.env.R2_ENV}/${drop.storageKey}`, 302);
         }
 
-        // Fallback: stream through API (local storage mode)
-        const { drop, stream } = yield* dropService.getFileStream(id);
+        // Fallback/local/encrypted path: stream through API.
+        const { stream } = yield* dropService.getFileStream(id);
 
         return new Response(Stream.toReadableStream(stream), {
           status: 200,

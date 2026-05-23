@@ -13,6 +13,8 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
     expose:
       - '3001'
+    networks:
+      - coolify
 
   web:
     build:
@@ -35,3 +37,7 @@ services:
       traefik.http.routers.dropthing-http.service: noop@internal
       traefik.http.middlewares.dropthing-redirect.redirectscheme.scheme: https
       traefik.http.middlewares.dropthing-redirect.redirectscheme.permanent: 'true'
+
+networks:
+  coolify:
+    external: true

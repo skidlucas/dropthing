@@ -177,7 +177,12 @@ export default function dropRoutes(runtime: AppRuntime) {
           headers: {
             'Content-Type': drop.mimeType ?? 'application/octet-stream',
             'Content-Disposition': `attachment; filename="${drop.fileName}"`,
-            ...(drop.size != null ? { 'Content-Length': drop.size.toString() } : {}),
+            // Encrypted files are streamed through the API from object storage. Do not
+            // force Content-Length here: if storage/proxy framing differs from the DB
+            // size metadata, browsers like Firefox abort with NS_BASE_STREAM_CLOSED.
+            ...(!drop.encrypted && drop.size != null
+              ? { 'Content-Length': drop.size.toString() }
+              : {}),
           },
         });
       })

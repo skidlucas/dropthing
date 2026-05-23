@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { getFileUrl, formatSize, timeRemaining } from '@/lib/api';
-import { importKey, decryptFileChunked } from '@/lib/crypto';
+import { importKey, decryptFileChunked, decryptFileStream } from '@/lib/crypto';
 import { useDrop } from '@/hooks/useDrop';
 import { useFilePreview } from '@/hooks/useFilePreview';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
@@ -13,6 +13,15 @@ const fadeIn = {
   exit: { opacity: 0, y: -8 },
   transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] as const },
 };
+
+type SaveFilePicker = (options: { suggestedName?: string }) => Promise<{
+  createWritable: () => Promise<WritableStream<Uint8Array>>;
+}>;
+
+function getSaveFilePicker(): SaveFilePicker | null {
+  const win = window as Window & { showSaveFilePicker?: SaveFilePicker };
+  return win.showSaveFilePicker ?? null;
+}
 
 async function saveBlob(blob: Blob, fileName: string): Promise<void> {
   const url = URL.createObjectURL(blob);
@@ -35,19 +44,31 @@ export function DropPage({ id }: { id: string }) {
   } = useFilePreview(drop, id, keyString);
   const { copy } = useCopyFeedback();
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   async function handleEncryptedDownload() {
     if (!drop || !keyString) return;
     setDownloading(true);
+    setDownloadError(null);
     try {
+      const key = await importKey(keyString);
+      const saveFilePicker = getSaveFilePicker();
       const res = await fetch(getFileUrl(id));
       if (!res.ok) throw new Error(`Download failed (${res.status})`);
+
+      if (saveFilePicker && res.body) {
+        const decrypted = await decryptFileStream(key, res.body);
+        const fileHandle = await saveFilePicker({ suggestedName: decrypted.fileName });
+        const writable = await fileHandle.createWritable();
+        await decrypted.stream.pipeTo(writable);
+        return;
+      }
+
       const ciphertext = await res.blob();
-      const key = await importKey(keyString);
       const { fileName, blob } = await decryptFileChunked(key, ciphertext);
       await saveBlob(blob, fileName);
-    } catch {
-      // Download error — user can retry
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Download failed');
     } finally {
       setDownloading(false);
     }
@@ -157,6 +178,8 @@ export function DropPage({ id }: { id: string }) {
                   {previewUnavailableReason}
                 </p>
               )}
+
+              {downloadError && <p className="text-red-400 text-sm text-center">{downloadError}</p>}
 
               {drop.encrypted && !keyString ? (
                 <p className="text-red-400 text-sm text-center">

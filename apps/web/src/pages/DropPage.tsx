@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { getFileUrl, formatSize, timeRemaining } from '@/lib/api';
-import { importKey, decryptFileStream, readEncryptedFileHeader } from '@/lib/crypto';
+import { importKey, decryptFileChunked } from '@/lib/crypto';
 import { useDrop } from '@/hooks/useDrop';
 import { useFilePreview } from '@/hooks/useFilePreview';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
@@ -13,22 +13,6 @@ const fadeIn = {
   exit: { opacity: 0, y: -8 },
   transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] as const },
 };
-
-type SaveFilePicker = (options: { suggestedName?: string }) => Promise<{
-  createWritable: () => Promise<WritableStream<Uint8Array>>;
-}>;
-
-function getSaveFilePicker(): SaveFilePicker | null {
-  const win = window as Window & { showSaveFilePicker?: SaveFilePicker };
-  return win.showSaveFilePicker ?? null;
-}
-
-async function fetchFileBody(url: string): Promise<ReadableStream<Uint8Array>> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Download failed (${res.status})`);
-  if (res.body) return res.body;
-  return (await res.blob()).stream();
-}
 
 async function saveBlob(blob: Blob, fileName: string): Promise<void> {
   const url = URL.createObjectURL(blob);
@@ -56,26 +40,14 @@ export function DropPage({ id }: { id: string }) {
     if (!drop || !keyString) return;
     setDownloading(true);
     try {
+      const res = await fetch(getFileUrl(id));
+      if (!res.ok) throw new Error(`Download failed (${res.status})`);
+      const ciphertext = await res.blob();
       const key = await importKey(keyString);
-      const saveFilePicker = getSaveFilePicker();
-
-      if (saveFilePicker) {
-        const headerStream = await fetchFileBody(getFileUrl(id));
-        const header = await readEncryptedFileHeader(key, headerStream);
-        const fileHandle = await saveFilePicker({ suggestedName: header.fileName });
-        const writable = await fileHandle.createWritable();
-        const body = await fetchFileBody(getFileUrl(id));
-        const decrypted = await decryptFileStream(key, body);
-        await decrypted.stream.pipeTo(writable);
-        return;
-      }
-
-      const body = await fetchFileBody(getFileUrl(id));
-      const decrypted = await decryptFileStream(key, body);
-      const blob = await new Response(decrypted.stream).blob();
-      await saveBlob(blob, decrypted.fileName);
+      const { fileName, blob } = await decryptFileChunked(key, ciphertext);
+      await saveBlob(blob, fileName);
     } catch {
-      // Download error or save dialog cancelled — user can retry
+      // Download error — user can retry
     } finally {
       setDownloading(false);
     }

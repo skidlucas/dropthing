@@ -62,7 +62,7 @@ export function UploadPage() {
 
   return (
     <Layout>
-      <AnimatePresence mode="wait">
+      <AnimatePresence initial={false}>
         {result ? (
           <motion.div key="success" {...fadeIn} className="space-y-6">
             <div className="text-center space-y-3">

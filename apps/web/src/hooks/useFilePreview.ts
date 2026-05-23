@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { DropJson } from '@dropthing/shared';
 import { getFileUrl } from '@/lib/api';
-import { importKey, decryptFileStream, readEncryptedFileHeader } from '@/lib/crypto';
+import { importKey, decryptFileChunked } from '@/lib/crypto';
 import { getPreviewType, mimeFromExtension, type PreviewType } from '@/lib/preview';
 
 const MAX_ENCRYPTED_PREVIEW_SIZE = 100 * 1024 * 1024;
@@ -13,13 +13,6 @@ interface FilePreviewData {
   decryptedFileName: string | null;
   isBlobUrl: boolean;
   previewUnavailableReason: string | null;
-}
-
-async function fetchFileBody(url: string): Promise<ReadableStream<Uint8Array>> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Preview fetch failed (${res.status})`);
-  if (res.body) return res.body;
-  return (await res.blob()).stream();
 }
 
 async function buildPreview(
@@ -42,35 +35,43 @@ async function buildPreview(
     return null;
   }
 
-  // Encrypted: read and authenticate only the header first so large files don't get
-  // decrypted just to discover their filename/previewability.
+  // Encrypted previews require full client-side decryption before the browser can
+  // display them. Avoid fetching/decrypting large encrypted files just for preview.
   if (drop.encrypted && keyString) {
-    const key = await importKey(keyString);
-    const header = await readEncryptedFileHeader(key, await fetchFileBody(getFileUrl(id)));
-    const mime = mimeFromExtension(header.fileName);
-    const type = mime ? getPreviewType(mime) : null;
-
-    if (!type || !mime || header.originalSize > MAX_ENCRYPTED_PREVIEW_SIZE) {
+    if (drop.size != null && drop.size > MAX_ENCRYPTED_PREVIEW_SIZE) {
       return {
         previewUrl: '',
         previewType: null,
-        decryptedFileName: header.fileName,
+        decryptedFileName: null,
         isBlobUrl: false,
-        previewUnavailableReason:
-          header.originalSize > MAX_ENCRYPTED_PREVIEW_SIZE
-            ? 'Preview disabled for large encrypted files. Download to view.'
-            : null,
+        previewUnavailableReason: 'Preview disabled for large encrypted files. Download to view.',
       };
     }
 
-    const decrypted = await decryptFileStream(key, await fetchFileBody(getFileUrl(id)));
-    const contentBlob = await new Response(decrypted.stream).blob();
-    const blob = contentBlob.slice(0, contentBlob.size, mime);
+    const res = await fetch(getFileUrl(id));
+    if (!res.ok) throw new Error(`Preview fetch failed (${res.status})`);
+    const ciphertext = await res.blob();
+    const key = await importKey(keyString);
+    const { fileName, blob: contentBlob } = await decryptFileChunked(key, ciphertext);
+    const mime = mimeFromExtension(fileName);
+    const type = mime ? getPreviewType(mime) : null;
+
+    if (type && mime) {
+      const blob = contentBlob.slice(0, contentBlob.size, mime);
+      return {
+        previewUrl: URL.createObjectURL(blob),
+        previewType: type,
+        decryptedFileName: fileName,
+        isBlobUrl: true,
+        previewUnavailableReason: null,
+      };
+    }
+
     return {
-      previewUrl: URL.createObjectURL(blob),
-      previewType: type,
-      decryptedFileName: decrypted.fileName,
-      isBlobUrl: true,
+      previewUrl: '',
+      previewType: null,
+      decryptedFileName: fileName,
+      isBlobUrl: false,
       previewUnavailableReason: null,
     };
   }

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { Effect, Layer, Schema, ServiceMap, Stream } from 'effect';
+import { Effect, Layer, Schema, Context, Stream } from 'effect';
 import type { Drop } from '@dropthing/shared';
 import {
   DropExpiredError,
@@ -10,7 +10,7 @@ import {
   StorageError,
 } from '@dropthing/shared';
 import { DropRepository } from './drop.repository.js';
-import type { DatabaseError } from '../../db/db.service.js';
+import type { EffectDrizzleQueryError } from 'drizzle-orm/effect-core';
 import { StorageService } from '../storage/storage.service.js';
 import { AiService } from '../ai/ai.service.js';
 
@@ -57,7 +57,11 @@ type DropServiceShape = {
     input: CreateDropInput
   ) => Effect.Effect<
     Drop,
-    InvalidInputError | FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError
+    | InvalidInputError
+    | FileTooLargeError
+    | StorageError
+    | EffectDrizzleQueryError
+    | Schema.SchemaError
   >;
   readonly presignUpload: (input: {
     fileName: string;
@@ -71,13 +75,17 @@ type DropServiceShape = {
     input: ConfirmUploadInput
   ) => Effect.Effect<
     Drop,
-    InvalidInputError | FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError
+    | InvalidInputError
+    | FileTooLargeError
+    | StorageError
+    | EffectDrizzleQueryError
+    | Schema.SchemaError
   >;
   readonly get: (
     id: string
   ) => Effect.Effect<
     Drop,
-    DropNotFoundError | DropExpiredError | DatabaseError | Schema.SchemaError
+    DropNotFoundError | DropExpiredError | EffectDrizzleQueryError | Schema.SchemaError
   >;
   readonly getFile: (
     id: string
@@ -87,7 +95,7 @@ type DropServiceShape = {
     | DropExpiredError
     | InvalidInputError
     | StorageError
-    | DatabaseError
+    | EffectDrizzleQueryError
     | Schema.SchemaError
   >;
   readonly getFileStream: (
@@ -98,15 +106,18 @@ type DropServiceShape = {
     | DropExpiredError
     | InvalidInputError
     | StorageError
-    | DatabaseError
+    | EffectDrizzleQueryError
     | Schema.SchemaError
   >;
   readonly delete: (
     id: string
-  ) => Effect.Effect<void, DropNotFoundError | StorageError | DatabaseError | Schema.SchemaError>;
+  ) => Effect.Effect<
+    void,
+    DropNotFoundError | StorageError | EffectDrizzleQueryError | Schema.SchemaError
+  >;
 };
 
-export class DropService extends ServiceMap.Service<DropService, DropServiceShape>()(
+export class DropService extends Context.Service<DropService, DropServiceShape>()(
   '@dropthing/DropService'
 ) {
   static readonly layer = Layer.effect(

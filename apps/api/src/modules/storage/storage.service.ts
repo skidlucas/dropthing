@@ -1,4 +1,4 @@
-import { Effect, ServiceMap, Stream } from 'effect';
+import { Effect, Context, Stream } from 'effect';
 import { StorageError } from '@dropthing/shared';
 
 type StorageServiceShape = {
@@ -15,6 +15,6 @@ type StorageServiceShape = {
   readonly delete: (key: string) => Effect.Effect<void, StorageError>;
 };
 
-export class StorageService extends ServiceMap.Service<StorageService, StorageServiceShape>()(
+export class StorageService extends Context.Service<StorageService, StorageServiceShape>()(
   '@dropthing/StorageService'
 ) {}

@@ -17,38 +17,35 @@ export const R2StorageLayer = Layer.effect(
       catch: (error) => new StorageError({ message: 'Failed to create S3 client', error }),
     });
 
-    const save = Effect.fn('StorageService.save')(function* (key: string, data: Blob) {
+    const save = Effect.fn('R2Storage.save')(function* (key: string, data: Blob) {
       yield* Effect.tryPromise({
         try: () => s3Client.write(key, data),
         catch: (error) => new StorageError({ message: 'Failed to save file', error }),
       });
     });
 
-    const presign = Effect.fn('StorageService.presign')(function* (
-      key: string,
-      contentType: string
-    ) {
+    const presign = Effect.fn('R2Storage.presign')(function* (key: string, contentType: string) {
       return yield* Effect.try({
         try: () => s3Client.presign(key, { method: 'PUT', expiresIn: 600, type: contentType }),
         catch: (error) => new StorageError({ message: 'Failed to generate presigned URL', error }),
       });
     });
 
-    const exists = Effect.fn('StorageService.exists')(function* (key: string) {
+    const exists = Effect.fn('R2Storage.exists')(function* (key: string) {
       return yield* Effect.tryPromise({
         try: () => s3Client.file(key).exists(),
         catch: (error) => new StorageError({ message: 'Failed to check file existence', error }),
       });
     });
 
-    const get = Effect.fn('StorageService.get')(function* (key: string) {
+    const get = Effect.fn('R2Storage.get')(function* (key: string) {
       return yield* Effect.tryPromise({
         try: () => s3Client.file(key).bytes(),
         catch: (error) => new StorageError({ message: 'Failed to get file', error }),
       });
     });
 
-    const getStream = Effect.fn('StorageService.getStream')(function* (key: string) {
+    const getStream = Effect.fn('R2Storage.getStream')(function* (key: string) {
       const s3File = s3Client.file(key);
 
       const fileExists = yield* Effect.tryPromise({
@@ -68,7 +65,7 @@ export const R2StorageLayer = Layer.effect(
       });
     });
 
-    const del = Effect.fn('StorageService.delete')(function* (key: string) {
+    const del = Effect.fn('R2Storage.delete')(function* (key: string) {
       yield* Effect.tryPromise({
         try: () => s3Client.delete(key),
         catch: (error) => new StorageError({ message: 'Failed to delete file', error }),

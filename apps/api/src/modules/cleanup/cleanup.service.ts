@@ -1,14 +1,17 @@
-import { Effect, Layer, Schema, ServiceMap } from 'effect';
+import { Effect, Layer, Schema, Context } from 'effect';
 import { StorageError } from '@dropthing/shared';
 import { DropRepository } from '../drop/drop.repository.js';
 import { StorageService } from '../storage/storage.service.js';
-import type { DatabaseError } from '../../db/db.service.js';
+import type { EffectDrizzleQueryError } from 'drizzle-orm/effect-core';
 
 type CleanupServiceShape = {
-  readonly runOnce: () => Effect.Effect<void, DatabaseError | StorageError | Schema.SchemaError>;
+  readonly runOnce: () => Effect.Effect<
+    void,
+    EffectDrizzleQueryError | StorageError | Schema.SchemaError
+  >;
 };
 
-export class CleanupService extends ServiceMap.Service<CleanupService, CleanupServiceShape>()(
+export class CleanupService extends Context.Service<CleanupService, CleanupServiceShape>()(
   '@dropthing/CleanupService'
 ) {
   static readonly layer = Layer.effect(

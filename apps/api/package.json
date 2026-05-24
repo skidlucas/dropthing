@@ -9,15 +9,16 @@
   "dependencies": {
     "@ai-sdk/groq": "3.0.31",
     "@dropthing/shared": "workspace:*",
+    "@effect/sql-pg": "4.0.0-beta.70",
     "ai": "6.0.141",
-    "drizzle-orm": "1.0.0-beta.9-e89174b",
-    "effect": "4.0.0-beta.35",
+    "drizzle-orm": "1.0.0-rc.3",
+    "effect": "4.0.0-beta.70",
     "hono": "4.12.8",
     "pg": "8.20.0"
   },
   "devDependencies": {
     "@types/bun": "1.3.10",
     "@types/pg": "8.18.0",
-    "drizzle-kit": "1.0.0-beta.17-67b1795"
+    "drizzle-kit": "1.0.0-rc.3"
   }
 }

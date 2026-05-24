@@ -13,7 +13,7 @@ export const LocalStorageLayer = Layer.effect(
       catch: (error) => new StorageError({ message: 'Failed to create uploads directory', error }),
     });
 
-    const save = Effect.fn('StorageService.save')(function* (key: string, data: Blob) {
+    const save = Effect.fn('LocalStorage.save')(function* (key: string, data: Blob) {
       yield* Effect.tryPromise({
         try: () => Bun.write(`${UPLOADS_DIR}/${key}`, data),
         catch: (error) => new StorageError({ message: 'Failed to save file', error }),
@@ -22,14 +22,14 @@ export const LocalStorageLayer = Layer.effect(
 
     const presign = (_key: string, _contentType: string) => Effect.succeed(null as string | null);
 
-    const exists = Effect.fn('StorageService.exists')(function* (key: string) {
+    const exists = Effect.fn('LocalStorage.exists')(function* (key: string) {
       return yield* Effect.tryPromise({
         try: () => Bun.file(`${UPLOADS_DIR}/${key}`).exists(),
         catch: (error) => new StorageError({ message: 'Failed to check file', error }),
       });
     });
 
-    const get = Effect.fn('StorageService.get')(function* (key: string) {
+    const get = Effect.fn('LocalStorage.get')(function* (key: string) {
       return yield* Effect.tryPromise({
         try: async () => {
           const file = Bun.file(`${UPLOADS_DIR}/${key}`);
@@ -40,7 +40,7 @@ export const LocalStorageLayer = Layer.effect(
       });
     });
 
-    const getStream = Effect.fn('StorageService.getStream')(function* (key: string) {
+    const getStream = Effect.fn('LocalStorage.getStream')(function* (key: string) {
       const file = Bun.file(`${UPLOADS_DIR}/${key}`);
 
       const fileExists = yield* Effect.tryPromise({
@@ -60,7 +60,7 @@ export const LocalStorageLayer = Layer.effect(
       });
     });
 
-    const del = Effect.fn('StorageService.delete')(function* (key: string) {
+    const del = Effect.fn('LocalStorage.delete')(function* (key: string) {
       yield* Effect.tryPromise({
         try: () => unlink(`${UPLOADS_DIR}/${key}`),
         catch: (error) => new StorageError({ message: 'Failed to delete file', error }),

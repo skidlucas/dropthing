@@ -1,4 +1,4 @@
-import { Effect, Layer, ServiceMap } from 'effect';
+import { Effect, Layer, Context } from 'effect';
 import { createGroq } from '@ai-sdk/groq';
 import { generateText } from 'ai';
 import type { DropMetadata, DropType } from '@dropthing/shared';
@@ -8,7 +8,7 @@ type AiServiceShape = {
   readonly enrichDrop: (content: string, type: DropType) => Effect.Effect<DropMetadata, AiError>;
 };
 
-export class AiService extends ServiceMap.Service<AiService, AiServiceShape>()(
+export class AiService extends Context.Service<AiService, AiServiceShape>()(
   '@dropthing/AiService'
 ) {
   static readonly layer = Layer.effect(

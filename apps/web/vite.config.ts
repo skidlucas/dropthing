@@ -13,9 +13,9 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          codemirror: ['@uiw/react-codemirror'],
-          motion: ['motion/react'],
+        manualChunks: (id) => {
+          if (id.includes('@uiw/react-codemirror')) return 'codemirror';
+          if (id.includes('motion/react')) return 'motion';
         },
       },
     },

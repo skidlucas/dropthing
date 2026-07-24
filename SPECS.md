@@ -124,8 +124,8 @@ Pre-commit hook runs `oxlint --fix` + `oxfmt --write` on staged files via lint-s
 
 Two separate domains:
 
-- `dropthing.lukapps.fr` (web, Caddy static files on :8080)
-- `api.dropthing.lukapps.fr` (API on :3001)
+- `dropthing.mtnz.app` (web, Caddy static files on :8080)
+- `api.dropthing.mtnz.app` (API on :3001)
 
 Traefik (managed by Coolify) routes traffic to each service. PostgreSQL is managed as a separate service by Coolify.
 

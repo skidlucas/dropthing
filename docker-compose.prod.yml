@@ -31,7 +31,7 @@ services:
       # /.well-known/acme-challenge/ before this redirect (ACME has max priority).
       # "Force HTTPS" must stay unchecked in Coolify to avoid global entrypoint redirect.
       traefik.http.routers.dropthing-http.entryPoints: http
-      traefik.http.routers.dropthing-http.rule: 'Host(`dropthing.lukapps.fr`)'
+      traefik.http.routers.dropthing-http.rule: 'Host(`dropthing.mtnz.app`)'
       traefik.http.routers.dropthing-http.priority: '100'
       traefik.http.routers.dropthing-http.middlewares: dropthing-redirect
       traefik.http.routers.dropthing-http.service: noop@internal

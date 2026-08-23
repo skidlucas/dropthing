@@ -9,7 +9,10 @@ services:
     ports:
       - '6543:5432'
     volumes:
-      - pgdata:/var/lib/postgresql/18/data
+      # PGDATA de l'image postgres:18 est /var/lib/postgresql/18/docker —
+      # monter …/18/data envoyait les données dans un volume anonyme,
+      # perdues à chaque `docker compose down`.
+      - pgdata:/var/lib/postgresql/18/docker
 
 volumes:
   pgdata:

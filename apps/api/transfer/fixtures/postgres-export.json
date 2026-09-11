@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "extractedAt": "2026-09-11T00:00:00.000Z",
+  "source": "postgres",
+  "rows": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "type": "text",
+      "content": "héllo ' D1",
+      "fileName": null,
+      "mimeType": null,
+      "size": null,
+      "storageKey": null,
+      "metadata": { "title": "Unicode ✓", "language": "text" },
+      "encrypted": false,
+      "createdAt": "2026-09-10T12:34:56.789Z",
+      "expiresAt": "2026-09-17T12:34:56.789Z"
+    },
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "type": "file",
+      "content": null,
+      "fileName": "秘密.bin",
+      "mimeType": "application/octet-stream",
+      "size": 42,
+      "storageKey": "2026/09/10/legacy-object.bin",
+      "metadata": null,
+      "encrypted": true,
+      "createdAt": "2026-09-10T13:00:00.000Z",
+      "expiresAt": "2026-09-10T13:01:00.000Z"
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "type": "link",
+      "content": "https://example.com/a?b=c&d=e",
+      "fileName": null,
+      "mimeType": null,
+      "size": null,
+      "storageKey": null,
+      "metadata": null,
+      "encrypted": false,
+      "createdAt": "2026-09-10T14:00:00.000Z",
+      "expiresAt": "2026-09-17T14:00:00.000Z"
+    }
+  ]
+}

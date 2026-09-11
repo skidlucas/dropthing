@@ -1,5 +1,4 @@
-import path from 'node:path';
-import { Effect, Layer, Schema, Context, Stream } from 'effect';
+import { Effect, Layer, Schema, Context } from 'effect';
 import type { Drop } from '@dropthing/shared';
 import {
   DropExpiredError,
@@ -7,10 +6,11 @@ import {
   FileTooLargeError,
   InvalidInputError,
   MAX_FILE_SIZE,
+  MAX_TEXT_SIZE,
   StorageError,
 } from '@dropthing/shared';
 import { DropRepository } from './drop.repository.js';
-import type { EffectDrizzleQueryError } from 'drizzle-orm/effect-core';
+import type { DatabaseError } from '../../db/db.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { AiService } from '../ai/ai.service.js';
 
@@ -20,7 +20,12 @@ export function generateStorageKey(fileName: string): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
 
-  return `${year}/${month}/${day}/${crypto.randomUUID()}${path.extname(fileName)}`;
+  const dot = fileName.lastIndexOf('.');
+  const extension =
+    dot > 0 && dot >= fileName.length - 16
+      ? fileName.slice(dot).replace(/[^.a-zA-Z0-9_-]/g, '')
+      : '';
+  return `${year}/${month}/${day}/${crypto.randomUUID()}${extension}`;
 }
 
 export type CreateDropInput =
@@ -57,11 +62,7 @@ type DropServiceShape = {
     input: CreateDropInput
   ) => Effect.Effect<
     Drop,
-    | InvalidInputError
-    | FileTooLargeError
-    | StorageError
-    | EffectDrizzleQueryError
-    | Schema.SchemaError
+    InvalidInputError | FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError
   >;
   readonly presignUpload: (input: {
     fileName: string;
@@ -69,23 +70,19 @@ type DropServiceShape = {
     size: number;
   }) => Effect.Effect<
     { uploadUrl: string; storageKey: string },
-    InvalidInputError | FileTooLargeError | StorageError
+    InvalidInputError | FileTooLargeError | StorageError | DatabaseError
   >;
   readonly confirmUpload: (
     input: ConfirmUploadInput
   ) => Effect.Effect<
     Drop,
-    | InvalidInputError
-    | FileTooLargeError
-    | StorageError
-    | EffectDrizzleQueryError
-    | Schema.SchemaError
+    InvalidInputError | FileTooLargeError | StorageError | DatabaseError | Schema.SchemaError
   >;
   readonly get: (
     id: string
   ) => Effect.Effect<
     Drop,
-    DropNotFoundError | DropExpiredError | EffectDrizzleQueryError | Schema.SchemaError
+    DropNotFoundError | DropExpiredError | DatabaseError | Schema.SchemaError
   >;
   readonly getFile: (
     id: string
@@ -95,26 +92,23 @@ type DropServiceShape = {
     | DropExpiredError
     | InvalidInputError
     | StorageError
-    | EffectDrizzleQueryError
+    | DatabaseError
     | Schema.SchemaError
   >;
   readonly getFileStream: (
     id: string
   ) => Effect.Effect<
-    { drop: Drop; stream: Stream.Stream<Uint8Array, StorageError> },
+    { drop: Drop; stream: ReadableStream<Uint8Array> },
     | DropNotFoundError
     | DropExpiredError
     | InvalidInputError
     | StorageError
-    | EffectDrizzleQueryError
+    | DatabaseError
     | Schema.SchemaError
   >;
   readonly delete: (
     id: string
-  ) => Effect.Effect<
-    void,
-    DropNotFoundError | StorageError | EffectDrizzleQueryError | Schema.SchemaError
-  >;
+  ) => Effect.Effect<void, DropNotFoundError | StorageError | DatabaseError | Schema.SchemaError>;
 };
 
 export class DropService extends Context.Service<DropService, DropServiceShape>()(
@@ -159,6 +153,13 @@ export class DropService extends Context.Service<DropService, DropServiceShape>(
 
         const encrypted = input.encrypted ?? false;
 
+        const contentBytes = new TextEncoder().encode(input.content).byteLength;
+        if (contentBytes > MAX_TEXT_SIZE) {
+          return yield* new InvalidInputError({
+            message: `Text content exceeds ${MAX_TEXT_SIZE} byte limit`,
+          });
+        }
+
         if (input.type === 'link' && !encrypted) {
           yield* Schema.decodeUnknownEffect(Schema.URLFromString)(input.content).pipe(
             Effect.mapError(() => new InvalidInputError({ message: 'Invalid URL' }))
@@ -199,6 +200,12 @@ export class DropService extends Context.Service<DropService, DropServiceShape>(
         }
 
         const storageKey = generateStorageKey(input.fileName);
+        yield* repo.createUploadIntent({
+          storageKey,
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          declaredSize: input.size,
+        });
         const uploadUrl = yield* storage.presign(storageKey, input.mimeType);
 
         if (!uploadUrl) {
@@ -221,13 +228,28 @@ export class DropService extends Context.Service<DropService, DropServiceShape>(
           });
         }
 
-        const fileExists = yield* storage.exists(input.storageKey);
-        if (!fileExists) {
+        const object = yield* storage.head(input.storageKey);
+        if (!object) {
           return yield* new InvalidInputError({
             message: 'File not found in storage — upload may have failed',
           });
         }
-
+        if (object.size !== input.size || object.size > MAX_FILE_SIZE) {
+          return yield* new InvalidInputError({
+            message: 'Stored object size does not match upload intent',
+          });
+        }
+        const intentValid = yield* repo.consumeUploadIntent({
+          storageKey: input.storageKey,
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          declaredSize: input.size,
+        });
+        if (!intentValid) {
+          return yield* new InvalidInputError({
+            message: 'Invalid, expired, or already used upload intent',
+          });
+        }
         const expiresAt = new Date(Date.now() + input.expiresIn * 1000);
 
         return yield* repo.insert({

@@ -1,5 +1,7 @@
 # dropthing — Ephemeral file sharing service
 
+> **Statut (11 septembre 2026)** : la production tourne sur Cloudflare — Worker `dropthing-production` (Static Assets + API), D1 et R2, servi par `dropthing.mtnz.app` en Custom Domain. Les sections Docker/Caddy/Coolify/PostgreSQL ci-dessous décrivent l’architecture d’origine, aujourd’hui décommissionnée. Voir [`docs/cloudflare/production.md`](docs/cloudflare/production.md).
+
 ## Concept
 
 Personal web service for ephemeral file sharing. Share files, text snippets, or links between your own devices or quickly share content with friends via a unique link.

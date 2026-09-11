@@ -8,6 +8,7 @@
     "build": "wrangler deploy --config wrangler.jsonc --dry-run --outdir .local-data/build",
     "cf:types": "wrangler types --config wrangler.jsonc src/worker-configuration.d.ts",
     "db:migrate:local": "wrangler d1 migrations apply dropthing-local --config wrangler.jsonc --local",
+    "db:migrate:remote": "wrangler d1 migrations apply dropthing-production --config wrangler.production.jsonc --remote",
     "db:reset:local": "bun run scripts/reset-local.ts",
     "validate:r2:remote": "bun run scripts/validate-r2-remote.ts",
     "transfer": "bun run transfer/cli.ts"

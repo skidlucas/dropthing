@@ -10,5 +10,4 @@ uploads/
 .local-data/
 apps/api/.wrangler/
 apps/api/.local-data/
-apps/api/transfer/*.json
 apps/api/worker-startup.cpuprofile

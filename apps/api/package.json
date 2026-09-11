@@ -10,8 +10,7 @@
     "db:migrate:local": "wrangler d1 migrations apply dropthing-local --config wrangler.jsonc --local",
     "db:migrate:remote": "wrangler d1 migrations apply dropthing-production --config wrangler.production.jsonc --remote",
     "db:reset:local": "bun run scripts/reset-local.ts",
-    "validate:r2:remote": "bun run scripts/validate-r2-remote.ts",
-    "transfer": "bun run transfer/cli.ts"
+    "validate:r2:remote": "bun run scripts/validate-r2-remote.ts"
   },
   "dependencies": {
     "@ai-sdk/groq": "4.0.30",
@@ -20,14 +19,12 @@
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "1.0.0-rc.5-169397b",
     "effect": "4.0.0-rc.111",
-    "hono": "4.13.3",
-    "pg": "8.23.0"
+    "hono": "4.13.3"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.9.11",
     "@cloudflare/workers-types": "5.20260911.1",
     "@types/bun": "1.4.0",
-    "@types/pg": "8.23.1",
     "drizzle-kit": "1.0.0-rc.5-ab785fc",
     "wrangler": "4.131.0"
   }

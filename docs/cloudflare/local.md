@@ -1,6 +1,6 @@
 # Développement local
 
-Prérequis : Bun 1.4+, Docker uniquement pour la fixture PostgreSQL de transfert.
+Prérequis : Bun 1.4+.
 
 ```sh
 bun install

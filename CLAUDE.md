@@ -9,7 +9,6 @@ Ephemeral file sharing service. Bun monorepo with Effect v4, Hono, Drizzle, Reac
 - `bun run lint` / `bun run lint:fix` — oxlint
 - `bun run format` / `bun run format:check` — oxfmt
 - `bun run type-check` — tsc --build --noEmit
-- `bun run compose` / `bun run compose:down` — local PostgreSQL
 
 ## Project structure
 

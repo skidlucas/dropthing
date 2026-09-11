@@ -18,10 +18,7 @@
     "db:migrate:local": "bun run --cwd apps/api db:migrate:local",
     "db:migrate:remote": "bun run --cwd apps/api db:migrate:remote",
     "db:reset:local": "bun run --cwd apps/api db:reset:local",
-    "transfer": "bun run --cwd apps/api transfer",
     "type-check": "tsc --build --noEmit",
-    "compose": "docker compose up -d",
-    "compose:down": "docker compose down",
     "prepare": "husky && effect-tsgo patch"
   },
   "devDependencies": {

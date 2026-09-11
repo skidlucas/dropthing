@@ -1,1 +1,0 @@
-ALTER TABLE "drops" ALTER COLUMN "size" SET DATA TYPE bigint USING "size"::bigint;

@@ -137,7 +137,6 @@ dropthing/
 ├── tsconfig.json               # Base config + project references
 ├── .oxlintrc.json              # Shared oxlint config
 ├── .husky/pre-commit           # lint-staged hook
-├── docker-compose.yml          # Fixture locale PostgreSQL (tests de transfert)
 ├── apps/
 │   ├── api/                    # Hono + Effect — backend API
 │   │   ├── .env                # Local dev env (DB_URL, USE_R2, R2_*)
@@ -146,8 +145,7 @@ dropthing/
 │   │   └── src/
 │   │       ├── index.ts        # Hono app entrypoint, centralized layer composition + job startup
 │   │       ├── __tests__/
-│   │       │   ├── drop.service.test.ts      # Service invariant tests (Effect Layer injection, mocked deps)
-│   │       │   └── drop.integration.test.ts  # Integration tests (real DB, zero-knowledge proof)
+│   │       │   └── drop.service.test.ts      # Service invariant tests (Effect Layer injection, mocked deps)
 │   │       ├── common/
 │   │       │   └── helpers.ts  # Shared route helpers (withBasicErrorHandling)
 │   │       ├── db/

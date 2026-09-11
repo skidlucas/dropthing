@@ -118,18 +118,13 @@ Pre-commit hook runs `oxlint --fix` + `oxfmt --write` on staged files via lint-s
 
 ### Deployment
 
-| Tool        | Role                                                                                                      |
-| ----------- | --------------------------------------------------------------------------------------------------------- |
-| **Docker**  | One Dockerfile per app (multi-stage build with `oven/bun` image). API uses `oven/bun:1-slim` for runtime. |
-| **Caddy**   | Serves the frontend static build (in the web Dockerfile)                                                  |
-| **Coolify** | Self-hosted deployment platform, deploys via a single `docker-compose.prod.yml`                           |
+La production est assurée par Cloudflare Workers Builds, connecté à la branche `master` :
 
-Two separate domains:
+- **Worker** `dropthing-production` : Static Assets (frontend) + API Hono/Effect, sur le Custom Domain `dropthing.mtnz.app`.
+- **D1** `dropthing-production` : métadonnées des drops ; **R2** bucket `dropthing` : fichiers, servis via `cdn-dropthing.mtnz.app`.
+- Build : `bun install --frozen-lockfile && bun run type-check && bun run lint && bun run test && bun run build` ; deploy : migrations D1 puis `wrangler deploy`.
 
-- `dropthing.mtnz.app` (web, Caddy static files on :8080)
-- `api.dropthing.mtnz.app` (API on :3001)
-
-Traefik (managed by Coolify) routes traffic to each service. PostgreSQL is managed as a separate service by Coolify.
+L’ancienne cible Docker + Caddy + Coolify (Traefik, PostgreSQL) sur VPS a été décommissionnée le 11 septembre 2026. Voir [`docs/cloudflare/production.md`](docs/cloudflare/production.md).
 
 ---
 
@@ -142,13 +137,10 @@ dropthing/
 ├── tsconfig.json               # Base config + project references
 ├── .oxlintrc.json              # Shared oxlint config
 ├── .husky/pre-commit           # lint-staged hook
-├── docker-compose.yml          # Local dev: PostgreSQL 18 on port 6543
-├── docker-compose.prod.yml     # Production: api + web (portable, no Coolify dependency)
-├── .env                        # Root env for docker-compose.prod.yml (DB_URL, R2_*, CORS_ORIGIN, VITE_API_URL)
+├── docker-compose.yml          # Fixture locale PostgreSQL (tests de transfert)
 ├── apps/
 │   ├── api/                    # Hono + Effect — backend API
 │   │   ├── .env                # Local dev env (DB_URL, USE_R2, R2_*)
-│   │   ├── Dockerfile          # Multi-stage: oven/bun:1 (deps) → oven/bun:1-slim (runtime)
 │   │   ├── drizzle.config.ts   # Drizzle Kit config
 │   │   ├── tsconfig.json       # Extends root, composite: true
 │   │   └── src/
@@ -178,8 +170,6 @@ dropthing/
 │   │           └── health/
 │   │               └── health.route.ts     # GET /health
 │   └── web/                    # React + Vite — frontend
-│       ├── Dockerfile          # Multi-stage: oven/bun:1 (build) → caddy:2-alpine (serve)
-│       ├── Caddyfile           # Static file server
 │       ├── tsconfig.json       # Extends root, composite: true, jsx: react-jsx
 │       └── src/
 │           ├── App.tsx         # URL-based routing (/ → UploadPage, /drops/:id → DropPage)

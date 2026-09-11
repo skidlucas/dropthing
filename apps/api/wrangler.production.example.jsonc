@@ -30,5 +30,5 @@
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "dropthing" }],
   "triggers": { "crons": ["*/5 * * * *"] },
   "observability": { "enabled": true, "redact_query_string": true },
-  "routes": [{ "pattern": "dropthing.mtnz.app/*", "zone_name": "mtnz.app" }],
+  "routes": [{ "pattern": "dropthing.mtnz.app", "custom_domain": true }],
 }

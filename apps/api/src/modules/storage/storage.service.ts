@@ -1,4 +1,4 @@
-import { Effect, Context, Stream } from 'effect';
+import { Effect, Context } from 'effect';
 import { StorageError } from '@dropthing/shared';
 
 type StorageServiceShape = {
@@ -8,10 +8,11 @@ type StorageServiceShape = {
     contentType: string
   ) => Effect.Effect<string | null, StorageError>;
   readonly exists: (key: string) => Effect.Effect<boolean, StorageError>;
-  readonly get: (key: string) => Effect.Effect<Uint8Array, StorageError>;
-  readonly getStream: (
+  readonly head: (
     key: string
-  ) => Effect.Effect<Stream.Stream<Uint8Array, StorageError>, StorageError>;
+  ) => Effect.Effect<{ size: number; contentType: string | null } | null, StorageError>;
+  readonly get: (key: string) => Effect.Effect<Uint8Array, StorageError>;
+  readonly getStream: (key: string) => Effect.Effect<ReadableStream<Uint8Array>, StorageError>;
   readonly delete: (key: string) => Effect.Effect<void, StorageError>;
 };
 

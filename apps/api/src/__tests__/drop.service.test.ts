@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest';
-import { Effect, Layer, Stream } from 'effect';
+import { Effect, Layer } from 'effect';
 import { DropService } from '../modules/drop/drop.service.js';
 import { DropRepository, type InsertDropInput } from '../modules/drop/drop.repository.js';
 import { StorageService } from '../modules/storage/storage.service.js';
@@ -20,8 +20,17 @@ function makeMocks() {
     save: (_key, _data) => Effect.void,
     presign: (_key, _contentType) => Effect.succeed('https://mock-presign-url' as string | null),
     exists: (_key) => Effect.succeed(true),
+    head: (_key) => Effect.succeed({ size: 14, contentType: 'application/octet-stream' }),
     get: (_key) => Effect.succeed(new Uint8Array()),
-    getStream: (_key) => Effect.succeed(Stream.fromIterable([new Uint8Array([1, 2, 3])])),
+    getStream: (_key) =>
+      Effect.succeed(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array([1, 2, 3]));
+            controller.close();
+          },
+        })
+      ),
     delete: (_key) => Effect.void,
   });
 
@@ -44,6 +53,10 @@ function makeMocks() {
     findExpiredWithStorageKey: () => Effect.succeed([]),
     deleteById: (_id) => Effect.void,
     clearStorageKey: (_id) => Effect.void,
+    createUploadIntent: (_input) => Effect.void,
+    consumeUploadIntent: (_input) => Effect.succeed(true),
+    findExpiredUploadIntents: () => Effect.succeed([]),
+    deleteUploadIntent: (_key) => Effect.void,
   });
 
   const TestLayer = DropService.layer.pipe(

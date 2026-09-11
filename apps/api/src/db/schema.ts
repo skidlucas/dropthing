@@ -1,34 +1,35 @@
-import {
-  bigint,
-  boolean,
-  jsonb,
-  pgTable,
-  text,
-  varchar,
-  timestamp,
-  index,
-  uuid,
-} from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
-export const dropsTable = pgTable(
+export const dropsTable = sqliteTable(
   'drops',
   {
-    id: uuid().primaryKey().defaultRandom(),
-    type: varchar({ enum: ['file', 'text', 'link'] })
+    id: text().primaryKey(),
+    type: text({ enum: ['file', 'text', 'link'] })
       .notNull()
       .default('text'),
     content: text(),
-    fileName: varchar(),
-    mimeType: varchar(),
-    size: bigint({ mode: 'number' }),
-    storageKey: varchar(),
-    metadata: jsonb().$type<{ language?: string; title?: string }>(),
-    encrypted: boolean().notNull().default(false),
-    createdAt: timestamp().notNull().defaultNow(),
-    expiresAt: timestamp()
-      .notNull()
-      .default(sql`now() + interval '1 week'`),
+    fileName: text('file_name'),
+    mimeType: text('mime_type'),
+    size: integer(),
+    storageKey: text('storage_key'),
+    metadata: text({ mode: 'json' }).$type<{ language?: string; title?: string }>(),
+    encrypted: integer({ mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
   },
-  (table) => [index('expires_at_index').on(table.expiresAt)]
+  (table) => [index('drops_expires_at_idx').on(table.expiresAt)]
+);
+
+export const uploadIntentsTable = sqliteTable(
+  'upload_intents',
+  {
+    storageKey: text('storage_key').primaryKey(),
+    fileName: text('file_name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    declaredSize: integer('declared_size').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    consumedAt: integer('consumed_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [index('upload_intents_expires_at_idx').on(table.expiresAt)]
 );

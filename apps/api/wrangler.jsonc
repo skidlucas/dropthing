@@ -1,0 +1,32 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dropthing-local",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": { "ip": "127.0.0.1", "port": 3001 },
+  "assets": {
+    "directory": "../web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "vars": {
+    "ENVIRONMENT": "local",
+    "CORS_ORIGIN": "http://localhost:3001",
+    "R2_BUCKET_NAME": "dropthing-local",
+    "R2_PREFIX": "local",
+    "R2_PUBLIC_URL": "",
+    "GROQ_API_KEY": "",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dropthing-local",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "d1",
+    },
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "dropthing-local" }],
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "observability": { "enabled": true, "redact_query_string": true },
+}

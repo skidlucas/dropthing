@@ -1,23 +1,23 @@
-import { PgClient } from '@effect/sql-pg';
-import * as PgDrizzle from 'drizzle-orm/effect-postgres';
-import { Config, Context, Layer } from 'effect';
-import type { SqlClient } from 'effect/unstable/sql/SqlClient';
-import type { SqlError } from 'effect/unstable/sql/SqlError';
+import { Context, Effect, Layer, Schema } from 'effect';
+import { drizzle } from 'drizzle-orm/d1';
 
-type DrizzleDb = PgDrizzle.EffectPgDatabase & {
-  readonly $client: PgClient.PgClient;
-};
+export class DatabaseError extends Schema.TaggedError<DatabaseError>()('DatabaseError', {
+  operation: Schema.String,
+  error: Schema.Defect(),
+}) {}
 
-export const Pg: Layer.Layer<PgClient.PgClient | SqlClient, Config.ConfigError | SqlError> =
-  PgClient.layerConfig({
-    url: Config.redacted('DB_URL'),
-  });
+export type D1Db = ReturnType<typeof drizzle>;
 
-export class DrizzleService extends Context.Service<DrizzleService, DrizzleDb>()(
+export class DrizzleService extends Context.Service<DrizzleService, D1Db>()(
   '@dropthing/DrizzleService'
 ) {
-  static readonly layer: Layer.Layer<DrizzleService, Config.ConfigError | SqlError> = Layer.effect(
-    DrizzleService,
-    PgDrizzle.make()
-  ).pipe(Layer.provide(PgDrizzle.DefaultServices), Layer.provide(Pg));
+  static layer(database: D1Database): Layer.Layer<DrizzleService> {
+    return Layer.succeed(DrizzleService, drizzle(database));
+  }
 }
+
+export const d1Effect = <A>(
+  operation: string,
+  run: () => Promise<A>
+): Effect.Effect<A, DatabaseError> =>
+  Effect.tryPromise({ try: run, catch: (error) => new DatabaseError({ operation, error }) });

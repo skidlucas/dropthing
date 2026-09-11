@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { Effect, Schema, Stream } from 'effect';
+import { Effect, Schema } from 'effect';
 import type { ManagedRuntime } from 'effect';
 import { DropService, type CreateDropInput } from './drop.service.js';
 import { InvalidInputError, UUID, UploadParams, MIN_TTL, MAX_TTL } from '@dropthing/shared';
@@ -7,6 +7,12 @@ import { withBasicErrorHandling } from '../../common/helpers.js';
 
 // oxlint-disable-next-line typescript/no-explicit-any -- layer error type is complex, using any for simplicity
 type AppRuntime = ManagedRuntime.ManagedRuntime<DropService, any>;
+
+const contentDisposition = (fileName: string | null) => {
+  const name = fileName ?? 'download';
+  const fallback = name.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+};
 
 const parseParams = Effect.fn('drops.parseParams')(function* (formData: FormData) {
   const obj: Record<string, unknown> = {
@@ -21,7 +27,7 @@ const parseParams = Effect.fn('drops.parseParams')(function* (formData: FormData
   );
 });
 
-export default function dropRoutes(runtime: AppRuntime) {
+export default function dropRoutes(runtime: AppRuntime, r2PublicUrl?: string) {
   const drops = new Hono();
 
   drops.post('/', async (c) => {
@@ -155,8 +161,6 @@ export default function dropRoutes(runtime: AppRuntime) {
         );
 
         const dropService = yield* DropService;
-        const r2PublicUrl = process.env.R2_PUBLIC_URL;
-
         // Encrypted files must be readable by browser JS for client-side decryption.
         // Avoid redirecting those to the CDN: Cloudflare/R2 CORS config can block fetch(),
         // while the same-origin API stream works without exposing storage CORS details.
@@ -166,17 +170,17 @@ export default function dropRoutes(runtime: AppRuntime) {
         }
 
         if (r2PublicUrl && !drop.encrypted) {
-          return c.redirect(`${r2PublicUrl}/${process.env.R2_ENV}/${drop.storageKey}`, 302);
+          return c.redirect(`${r2PublicUrl.replace(/\/$/, '')}/${drop.storageKey}`, 302);
         }
 
         // Fallback/local/encrypted path: stream through API.
         const { stream } = yield* dropService.getFileStream(id);
 
-        return new Response(Stream.toReadableStream(stream), {
+        return new Response(stream, {
           status: 200,
           headers: {
             'Content-Type': drop.mimeType ?? 'application/octet-stream',
-            'Content-Disposition': `attachment; filename="${drop.fileName}"`,
+            'Content-Disposition': contentDisposition(drop.fileName),
             // Encrypted files are streamed through the API from object storage. Do not
             // force Content-Length here: if storage/proxy framing differs from the DB
             // size metadata, browsers like Firefox abort with NS_BASE_STREAM_CLOSED.

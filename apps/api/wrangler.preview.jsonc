@@ -1,0 +1,33 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dropthing-cloudflare-preview",
+  "account_id": "4ee3596aa154bb4e0509c39e98f4a25c",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": "../web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "vars": {
+    "ENVIRONMENT": "preview",
+    "CORS_ORIGIN": "https://dropthing-cloudflare-preview.lucas-4ee.workers.dev",
+    "R2_BUCKET_NAME": "dropthing",
+    "R2_PREFIX": "cloudflare-preview",
+    "R2_ACCOUNT_ID": "4ee3596aa154bb4e0509c39e98f4a25c",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dropthing-production",
+      "database_id": "ef0a50c9-edcd-44e4-ab76-6ab3a224179b",
+      "migrations_dir": "d1",
+      "remote": true,
+    },
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "dropthing", "remote": true }],
+  "observability": { "enabled": true, "redact_query_string": true },
+}

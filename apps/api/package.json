@@ -13,18 +13,18 @@
     "validate:r2:remote": "bun run scripts/validate-r2-remote.ts"
   },
   "dependencies": {
-    "@ai-sdk/groq": "4.0.30",
+    "@ai-sdk/groq": "4.0.54",
     "@dropthing/shared": "workspace:0.0.1",
-    "ai": "7.0.77",
+    "ai": "7.0.126",
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "1.0.0-rc.5-169397b",
     "effect": "4.0.0",
-    "hono": "4.13.3"
+    "hono": "4.13.12"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260911.1",
-    "@types/bun": "1.4.0",
+    "@cloudflare/workers-types": "5.20261001.1",
+    "@types/bun": "1.4.2",
     "drizzle-kit": "1.0.0-rc.5-ab785fc",
-    "wrangler": "4.131.0"
+    "wrangler": "4.145.0"
   }
 }

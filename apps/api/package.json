@@ -18,11 +18,10 @@
     "ai": "7.0.77",
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "1.0.0-rc.5-169397b",
-    "effect": "4.0.0-rc.111",
+    "effect": "4.0.0",
     "hono": "4.13.3"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.9.11",
     "@cloudflare/workers-types": "5.20260911.1",
     "@types/bun": "1.4.0",
     "drizzle-kit": "1.0.0-rc.5-ab785fc",

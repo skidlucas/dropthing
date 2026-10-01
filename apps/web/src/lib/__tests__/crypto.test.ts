@@ -108,7 +108,7 @@ describe('crypto', () => {
 
       const ciphertext = await encryptText(key1, 'secret message');
 
-      expect(decryptText(key2, ciphertext)).rejects.toThrow();
+      await expect(decryptText(key2, ciphertext)).rejects.toThrow();
     });
   });
 
@@ -121,7 +121,7 @@ describe('crypto', () => {
       const tampered = new Uint8Array(ciphertext);
       tampered[tampered.length - 1] ^= 0xff;
 
-      expect(decryptText(key, tampered.buffer)).rejects.toThrow();
+      await expect(decryptText(key, tampered.buffer)).rejects.toThrow();
     });
   });
 
